@@ -1,16 +1,34 @@
-# React + Vite
+# OrBullets
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Sistema de gestão de uma loja de armas e munições. Controla o estoque de munições, cartuchos e insumos, o cadastro e a venda de armas, a produção do clube e os relatórios mensais.
 
-Currently, two official plugins are available:
+Os dados ficam num banco local (SQLite), no computador da loja. Quando há internet, o aplicativo pode sincronizar uma cópia com o Supabase. A versão de uso diário é o aplicativo de desktop (Electron).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## O que cada parte faz
 
-## React Compiler
+- **Estoque.** Mostra o estoque por tipo de produto, calibre e item. Registra entradas e saídas. Na saída, gera o termo em PDF.
+- **Movimentações.** Lista as últimas entradas e saídas do estoque e permite reabrir o termo de uma saída.
+- **Mapa mensal.** Guarda, mês a mês, os PDFs do relatório de estoque e do relatório de armas neste computador.
+- **Cadastro.** Cadastra calibres, produtos (munição, cartucho e insumo), marcas e tipos de arma.
+- **Clube.** Controla a produção de munição do clube: receitas, lotes, estoque de componentes e relatório.
+- **Armas.** Cadastra armas, registra vendas e entregas e gera os documentos em PDF (papel de venda, contrato e comprovante de entrega). Separa armas em estoque, armas vendidas que ainda serão compradas e armas retiradas no mês. Armas ainda não recebidas não entram no mapa nem no relatório.
+- **Configurações.** Liga o aviso de estoque baixo. O aviso vale para qualquer computador ligado a este servidor.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Como rodar
 
-## Expanding the ESLint configuration
+```bash
+npm install
+npm run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+O comando sobe a API local e a interface web. Para abrir o aplicativo de desktop:
+
+```bash
+npm run dev:electron
+```
+
+Para gerar o instalador:
+
+```bash
+npm run build:electron
+```
