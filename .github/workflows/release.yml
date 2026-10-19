@@ -56,6 +56,7 @@ jobs:
         run: npx vite build --mode electron
 
       - name: Gerar instalador e publicar
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win nsis --publish always -c.directories.output=release
