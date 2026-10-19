@@ -1,10 +1,17 @@
-const { app, BrowserWindow, ipcMain, Menu } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const http = require('http')
 const { execFile } = require('child_process')
 const { pathToFileURL } = require('node:url')
+
+const {
+  iniciarVerificacaoPeriodica,
+  verificarAtualizacoes,
+  obterEstadoAtualizacao,
+  executarInstalacao,
+} = require('./updater.js')
 
 const SPLASH_MIN_MS = 1400
 
@@ -123,6 +130,30 @@ function applySupabaseSyncEnvFromUserData() {
   applySupabaseDefaults()
 }
 
+/** Lê /api/health do servidor que já ocupa a porta (ou null se não responder). */
+function fetchLocalHealth(port) {
+  return new Promise((resolve) => {
+    const req = http.get(
+      { host: '127.0.0.1', port, path: '/api/health', timeout: 2500 },
+      (res) => {
+        let body = ''
+        res.on('data', (chunk) => {
+          body += chunk
+        })
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(body))
+          } catch {
+            resolve(null)
+          }
+        })
+      },
+    )
+    req.on('timeout', () => req.destroy())
+    req.on('error', () => resolve(null))
+  })
+}
+
 async function ensureServerRunning() {
   applySupabaseSyncEnvFromUserData()
   const cfg = readConfig()
@@ -142,8 +173,20 @@ async function ensureServerRunning() {
     return { ok: true, port }
   } catch (e) {
     const msg = e?.message || String(e)
-    if (msg.includes('EADDRINUSE') || msg.includes('already running')) {
+    if (msg.includes('already running')) {
       return { ok: true, port, already: true }
+    }
+    if (msg.includes('EADDRINUSE')) {
+      // A porta pode estar com outro processo (ex.: `npm run dev`, com outro banco).
+      // Só reaproveita se for um servidor OrBullets com este mesmo banco.
+      const health = await fetchLocalHealth(port)
+      const { dbIdForPath } = loadServerModule()
+      if (health?.ok && health.dbId === dbIdForPath(getDbPath())) {
+        return { ok: true, port, already: true }
+      }
+      throw new Error(
+        `A porta ${port} já está a ser usada por outro programa (por exemplo, "npm run dev" ou outra cópia do OrBullets com outro banco). Feche esse programa e abra o OrBullets de novo.`,
+      )
     }
     throw e
   }
@@ -374,6 +417,18 @@ function registerIpc() {
     return { ok: true }
   })
 
+  ipcMain.handle('orb:atualizacao-estado', () => obterEstadoAtualizacao())
+  ipcMain.handle('orb:atualizacao-verificar', () => verificarAtualizacoes())
+  ipcMain.handle('orb:atualizacao-instalar', () =>
+    executarInstalacao(() =>
+      // Grava o banco antes de fechar; não deixa uma conexão presa travar a instalação.
+      Promise.race([
+        stopServerIfRunning(),
+        new Promise((resolve) => setTimeout(resolve, 15000)),
+      ]),
+    ),
+  )
+
   /**
    * Grava o PDF em ficheiro temporário, carrega numa janela e chama
    * webContents.print({ silent: false }) para o diálogo nativo.
@@ -454,10 +509,17 @@ app.whenReady().then(async () => {
       await ensureServerRunning()
     } catch (err) {
       console.error('OrBullets: falha ao iniciar servidor local', err)
+      dialog.showErrorBox(
+        'OrBullets — servidor local',
+        err?.message || String(err),
+      )
+      app.quit()
+      return
     }
   }
 
   await createWindow()
+  iniciarVerificacaoPeriodica()
 
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) await createWindow()

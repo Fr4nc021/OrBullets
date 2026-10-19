@@ -15,4 +15,13 @@ contextBridge.exposeInMainWorld('orbDesktop', {
     ipcRenderer.invoke('orb:print-pdf-base64', base64, options),
   /** A interface já pode ser mostrada; fecha a tela de abertura. */
   notifyUiReady: () => ipcRenderer.send('orb:ui-ready'),
+  /** Atualização automática pelas releases do GitHub. */
+  atualizacaoEstado: () => ipcRenderer.invoke('orb:atualizacao-estado'),
+  atualizacaoVerificar: () => ipcRenderer.invoke('orb:atualizacao-verificar'),
+  atualizacaoInstalar: () => ipcRenderer.invoke('orb:atualizacao-instalar'),
+  onAtualizacao: (callback) => {
+    const listener = (_event, estado) => callback(estado)
+    ipcRenderer.on('orb:atualizacao-evento', listener)
+    return () => ipcRenderer.removeListener('orb:atualizacao-evento', listener)
+  },
 })

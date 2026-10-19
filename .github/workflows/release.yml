@@ -1,0 +1,61 @@
+name: Publicar release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Testes
+        run: npm test
+
+      - name: Validar tag e token
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: node scripts/validar-release.js
+
+      # O .env não vai para o GitHub. Ele é montado a partir dos secrets do repositório
+      # (Settings → Secrets and variables → Actions). Sem secrets, sai vazio e o PC
+      # que já tem o OrBullets instalado continua usando o .env que já está nele.
+      - name: Montar .env do instalador
+        shell: bash
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          : > .env
+          if [ -n "$VITE_SUPABASE_URL" ]; then
+            echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" >> .env
+            echo "ORB_SUPABASE_SYNC_URL=$VITE_SUPABASE_URL" >> .env
+          fi
+          if [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" >> .env
+            echo "ORB_SUPABASE_SYNC_KEY=$VITE_SUPABASE_ANON_KEY" >> .env
+          fi
+
+      - name: Build do frontend
+        run: npx vite build --mode electron
+
+      - name: Gerar instalador e publicar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win nsis --publish always -c.directories.output=release

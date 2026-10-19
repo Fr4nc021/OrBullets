@@ -9,17 +9,20 @@
     "api:local": "node backend/run-local.js",
     "build": "vite build --mode electron",
     "build:electron": "vite build --mode electron && electron-builder",
-    "start": "electron ."
+    "start": "electron .",
+    "test": "node --test tests/atualizacao.test.js",
+    "release:validar": "node scripts/validar-release.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",
-    "sql.js": "^1.13.0",
     "cors": "^2.8.5",
+    "electron-updater": "^6.8.9",
     "express": "^4.21.2",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "sql.js": "^1.13.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
@@ -56,7 +59,12 @@
       "!release-build/**",
       "!installer-out/**",
       "!.cursor/**",
-      "!.git/**"
+      "!.git/**",
+      "!.claude/**",
+      "!.github/**",
+      "!.local-data/**",
+      "!tests/**",
+      "!.env.example"
     ],
     "extraResources": [
       {
@@ -82,6 +90,16 @@
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "OrBullets"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Fr4nc021",
+      "repo": "OrBullets",
+      "releaseType": "release"
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Fr4nc021/OrBullets.git"
   }
 }

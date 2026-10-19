@@ -109,6 +109,23 @@ export async function repoFetchAmmoMovementsForReport() {
   return all
 }
 
+function mapAmmoTypesWithCalibers(types, calibers) {
+  const calMap = new Map((calibers ?? []).map((c) => [c.id, c]))
+  return (types ?? []).map((t) => {
+    const cal = calMap.get(t.caliber_id)
+    const caliberName = cal?.name ?? '—'
+    const productType = cal?.product_type ?? 'municao'
+    return {
+      id: t.id,
+      ammo_name: t.name,
+      caliber: caliberName,
+      product_type: productType,
+      label: `${t.name} — ${caliberName}`,
+      created_at: t.created_at ?? null,
+    }
+  })
+}
+
 export async function repoFetchAmmoTypesWithCalibers() {
   const { data: types, error: errTypes } = await supabase
     .from(T.ammo_types)
@@ -126,7 +143,17 @@ export async function repoFetchAmmoTypesWithCalibers() {
         .select('id, name, caliber_id')
         .order('name', { ascending: true })
       if (retry.error) throw retry.error
-      return { ammoTypes: retry.data ?? [], hasCreatedAt: false }
+      const calibersRetry = await supabase
+        .from(T.calibers)
+        .select('id, name, product_type')
+      if (calibersRetry.error) throw calibersRetry.error
+      return {
+        ammoTypes: mapAmmoTypesWithCalibers(
+          retry.data ?? [],
+          calibersRetry.data ?? [],
+        ),
+        hasCreatedAt: false,
+      }
     }
     throw errTypes
   }
@@ -137,23 +164,10 @@ export async function repoFetchAmmoTypesWithCalibers() {
 
   if (errCalibers) throw errCalibers
 
-  const calMap = new Map((calibers ?? []).map((c) => [c.id, c]))
-
-  const merged = (types ?? []).map((t) => {
-    const cal = calMap.get(t.caliber_id)
-    const caliberName = cal?.name ?? '—'
-    const productType = cal?.product_type ?? 'municao'
-    return {
-      id: t.id,
-      ammo_name: t.name,
-      caliber: caliberName,
-      product_type: productType,
-      label: `${t.name} — ${caliberName}`,
-      created_at: t.created_at ?? null,
-    }
-  })
-
-  return { ammoTypes: merged, hasCreatedAt: true }
+  return {
+    ammoTypes: mapAmmoTypesWithCalibers(types, calibers),
+    hasCreatedAt: true,
+  }
 }
 
 export async function repoInsertCaliber({ name, productType }) {

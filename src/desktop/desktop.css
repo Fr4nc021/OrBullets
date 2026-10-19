@@ -553,3 +553,64 @@
   color: var(--text);
   cursor: pointer;
 }
+
+/* Aviso de atualização automática (topo do app) */
+.orb-update {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin: 0 0 1rem;
+  padding: 0.85rem 1.1rem;
+  border-radius: 1rem;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text);
+}
+
+.orb-update--erro {
+  border-color: var(--danger-border, rgba(248, 113, 113, 0.4));
+  background: var(--danger-bg);
+}
+
+.orb-update__texto {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.orb-update__texto strong {
+  display: block;
+  color: var(--text-h);
+  font-size: 0.9rem;
+}
+
+.orb-update__texto p {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.orb-update__progresso {
+  margin-top: 0.5rem;
+  height: 0.35rem;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.orb-update__barra {
+  height: 100%;
+  background: var(--accent-bright);
+  transition: width 0.3s ease;
+}
+
+.orb-update__acao {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+  background: var(--gradient-primary);
+}
+
+.orb-update__acao:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

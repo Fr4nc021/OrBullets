@@ -13,6 +13,7 @@ import ConnectionStatus from './desktop/ConnectionStatus.jsx'
 import SyncNowButton from './desktop/SyncNowButton.jsx'
 import DesktopConnectionModal from './desktop/DesktopConnectionModal.jsx'
 import ServerIpButton from './desktop/ServerIpButton.jsx'
+import AtualizacaoBanner from './desktop/AtualizacaoBanner.jsx'
 import { isElectronApp, isDesktopLocalApi } from './services/dataMode.js'
 
 function App() {
@@ -48,6 +49,7 @@ function App() {
           }
         />
         <div className="app__main">
+          {isElectronApp() ? <AtualizacaoBanner /> : null}
           {tab === 'cadastro' ? (
             <AmmoPage />
           ) : tab === 'estoque' ? (

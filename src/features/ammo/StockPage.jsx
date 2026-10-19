@@ -888,7 +888,12 @@ export default function StockPage() {
           type="button"
           className="stock-page__action stock-page__action--entrada"
           onClick={() => openMovementDialog('entrada')}
-          disabled={loadingOptions || ammoOptions.length === 0}
+          disabled={loadingOptions}
+          title={
+            !loadingOptions && ammoOptions.length === 0
+              ? 'Abre a entrada. Se ainda não houver produto, cadastre-o na aba Cadastro.'
+              : 'Registrar entrada de produto'
+          }
         >
           Dar entrada
         </button>

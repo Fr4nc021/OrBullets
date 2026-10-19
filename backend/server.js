@@ -80,6 +80,18 @@ function ammoStockForType(db, ammoTypeId) {
  * @param {import('sql.js').Database} clubDb — clube (insumos / produção)
  * @param {() => void} saveClub
  */
+/** Identificador do banco aberto (hash do caminho), para o Electron saber se a porta é dele. */
+let dbInstanceId = null
+
+/** @param {string} dbPath */
+function dbIdForPath(dbPath) {
+  return crypto
+    .createHash('sha256')
+    .update(path.resolve(dbPath).toLowerCase())
+    .digest('hex')
+    .slice(0, 16)
+}
+
 function createApp(db, save, clubDb, saveClub) {
   const app = express()
   app.use(cors({ origin: true, credentials: true }))
@@ -103,7 +115,7 @@ function createApp(db, save, clubDb, saveClub) {
     })
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true })
+    res.json({ ok: true, dbId: dbInstanceId })
   })
 
   app.get('/api/calibers', (req, res) => {
@@ -1225,6 +1237,7 @@ async function start(opts) {
     throw new Error('Server already running.')
   }
   const { db, save } = await openDatabase(dbPath)
+  dbInstanceId = dbIdForPath(dbPath)
   sqlDb = db
   persistDb = save
   const { db: clubDb, save: saveClub } = await openClubDatabase(clubDbPath)
@@ -1312,4 +1325,4 @@ async function stop() {
   })
 }
 
-module.exports = { start, stop, createApp, openDatabase }
+module.exports = { start, stop, createApp, openDatabase, dbIdForPath }
