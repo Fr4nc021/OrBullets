@@ -10,10 +10,12 @@ export function WeaponsReportModal({
   onReportFromChange,
   onReportToChange,
   reportError,
+  arrivedRows,
   inStockShopRows,
   inStockFixedOwnerRows,
   soldRows,
   onExportPdf,
+  onExportDeliveredPdf,
 }) {
   if (!open) return null
 
@@ -46,6 +48,9 @@ export function WeaponsReportModal({
           </button>
         </div>
         <p className="stock-report__intro">
+          <strong>Chegaram no período:</strong> armas que entraram no estoque nas datas
+          abaixo (chegada registrada ou cadastro direto no estoque), mesmo que já tenham
+          sido retiradas depois.{' '}
           <strong>Estoque da loja / dono fixo:</strong> todas as armas com situação
           &quot;em estoque&quot;, separadas por dono (loja = texto &quot;estoque&quot; no
           cadastro).{' '}
@@ -85,6 +90,60 @@ export function WeaponsReportModal({
           </p>
         ) : null}
         <div className="stock-report__hierarchy-wrap">
+          <section
+            className="stock-report-hierarchy-type"
+            aria-labelledby="weapons-report-arrived"
+          >
+            <h3
+              id="weapons-report-arrived"
+              className="stock-report-hierarchy-type__title"
+            >
+              ARMAS QUE CHEGARAM (no período)
+            </h3>
+            <div className="stock-report__table-wrap">
+              <table className="stock-report-table stock-report-table--nested stock-report-table--weapons">
+                <thead>
+                  <tr>
+                    <th>Modelo</th>
+                    <th>Marca</th>
+                    <th>Tipo</th>
+                    <th>Calibre</th>
+                    <th>Nº série</th>
+                    <th>Dono</th>
+                    <th>Data de chegada</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportError ? (
+                    <tr>
+                      <td colSpan={7} className="stock-report-table__empty">
+                        Ajuste as datas para visualizar.
+                      </td>
+                    </tr>
+                  ) : arrivedRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="stock-report-table__empty">
+                        Nenhuma arma chegou neste período.
+                      </td>
+                    </tr>
+                  ) : (
+                    arrivedRows.map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.model}</td>
+                        <td>{r.brand}</td>
+                        <td>{r.type}</td>
+                        <td>{r.caliber}</td>
+                        <td>{r.serial}</td>
+                        <td>{r.owner}</td>
+                        <td>{r.arrivalDate}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
           <section
             className="stock-report-hierarchy-type"
             aria-labelledby="weapons-report-in-stock-shop"
@@ -255,6 +314,15 @@ export function WeaponsReportModal({
             disabled={loading || !!reportError}
           >
             Exportar PDF
+          </button>
+          <button
+            type="button"
+            className="stock-report__pdf-btn"
+            onClick={onExportDeliveredPdf}
+            disabled={loading || !!reportError}
+            title="Só as armas entregues no período, com CPF, RG e SINARM/SIGMA"
+          >
+            PDF só entregues (PF)
           </button>
         </div>
       </div>

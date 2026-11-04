@@ -1,4 +1,7 @@
-import { buildTermoEntregaNoteLine } from './weaponEntregaHelpers.js'
+import {
+  buildTermoEntregaNoteLine,
+  parseTermoEntregaFromNotes,
+} from './weaponEntregaHelpers.js'
 
 /** Valor usado no cadastro para “em estoque da loja” (botão na UI). */
 export const SHOP_STOCK_OWNER = 'estoque'
@@ -79,10 +82,54 @@ export function parseRetiradaTimestampMs(notes) {
   return NaN
 }
 
-function getWeaponCreatedMs(w) {
-  if (!w?.created_at) return NaN
-  const t = new Date(w.created_at).getTime()
+/** Interpreta `created_at` do Supabase (ISO) ou do SQLite local (`YYYY-MM-DD HH:MM:SS`, UTC). */
+function parseDbTimestampMs(value) {
+  if (!value) return NaN
+  const raw = String(value).trim()
+  const sqlite = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)
+  const t = new Date(sqlite ? `${raw.replace(' ', 'T')}Z` : raw).getTime()
   return Number.isFinite(t) ? t : NaN
+}
+
+function getWeaponCreatedMs(w) {
+  return parseDbTimestampMs(w?.created_at)
+}
+
+/** Linha gravada em `notes` quando a arma chega (sai de “para compra”/“aguardando chegada”). */
+export function buildArrivalNoteLine(iso) {
+  return `Chegada (${iso})`
+}
+
+/** Data/hora da linha `Chegada (ISO)` em `notes`. */
+export function parseArrivalTimestampMs(notes) {
+  if (!notes || typeof notes !== 'string') return NaN
+  const lines = notes.split('\n').map((l) => l.trim())
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const m = lines[i].match(/^Chegada\s*\(([^)]+)\)\s*$/i)
+    if (m) {
+      const t = new Date(m[1].trim()).getTime()
+      if (Number.isFinite(t)) return t
+    }
+  }
+  return NaN
+}
+
+/**
+ * Data de chegada da arma: linha `Chegada` em `notes`; sem ela, armas cadastradas
+ * direto no estoque (sem venda) chegaram no cadastro. Vendas antigas sem a linha: NaN.
+ */
+export function getWeaponArrivalMs(w) {
+  const fromNotes = parseArrivalTimestampMs(w?.notes)
+  if (Number.isFinite(fromNotes)) return fromNotes
+  if (w?.status === 'para_compra' || w?.status === 'aguardando_chegada') return NaN
+  if (/(?:^|\n)\s*Venda\s*—/i.test(String(w?.notes ?? ''))) return NaN
+  return getWeaponCreatedMs(w)
+}
+
+/** `DD/MM/AAAA` local. */
+export function formatDatePtFromMs(ms) {
+  if (!Number.isFinite(ms)) return '—'
+  return new Date(ms).toLocaleDateString('pt-BR')
 }
 
 /**
@@ -200,6 +247,10 @@ export function buildWeaponReportRows(
       responsible: parseCheckoutResponsibleFromNotes(w.notes),
       createdAtMs: getWeaponCreatedMs(w),
       withdrawalMs: getWeaponWithdrawalMs(w),
+      arrivalMs: getWeaponArrivalMs(w),
+      arrivalDate: formatDatePtFromMs(getWeaponArrivalMs(w)),
+      withdrawalDate: formatDatePtFromMs(getWeaponWithdrawalMs(w)),
+      termo: parseTermoEntregaFromNotes(w.notes),
     }))
     .sort((a, b) =>
       a.model.localeCompare(b.model, 'pt-BR', { sensitivity: 'base' }),

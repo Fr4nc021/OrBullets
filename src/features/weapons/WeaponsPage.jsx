@@ -54,6 +54,7 @@ import {
   withdrawalIsoFromDateInput,
 } from './weaponsReportHelpers.js'
 import { downloadWeaponsReportPdf } from './weaponsReportPdf.js'
+import { downloadWeaponsDeliveredReportPdf } from './weaponsDeliveredReportPdf.js'
 import { productTypeLabel } from '../ammo/productTypes.js'
 import '../ammo/StockPage.css'
 import './WeaponsPage.css'
@@ -1205,9 +1206,23 @@ export default function WeaponsPage() {
     })
   }, [reportRowsAll, reportPeriod, reportError])
 
+  const arrivedRows = useMemo(() => {
+    if (reportError) return []
+    const { startMs, endMs } = reportPeriod
+    return reportRowsAll
+      .filter(
+        (r) =>
+          Number.isFinite(r.arrivalMs) &&
+          r.arrivalMs >= startMs &&
+          r.arrivalMs <= endMs,
+      )
+      .sort((a, b) => a.arrivalMs - b.arrivalMs)
+  }, [reportRowsAll, reportPeriod, reportError])
+
   const exportWeaponsPdf = useCallback(() => {
     if (reportError) return
     downloadWeaponsReportPdf({
+      arrivedRows,
       inStockShopRows,
       inStockFixedOwnerRows,
       soldRows,
@@ -1215,6 +1230,7 @@ export default function WeaponsPage() {
       periodTo: reportTo,
     })
   }, [
+    arrivedRows,
     inStockShopRows,
     inStockFixedOwnerRows,
     soldRows,
@@ -1252,10 +1268,19 @@ export default function WeaponsPage() {
         onReportFromChange={setReportFrom}
         onReportToChange={setReportTo}
         reportError={reportError}
+        arrivedRows={arrivedRows}
         inStockShopRows={inStockShopRows}
         inStockFixedOwnerRows={inStockFixedOwnerRows}
         soldRows={soldRows}
         onExportPdf={exportWeaponsPdf}
+        onExportDeliveredPdf={() => {
+          if (reportError) return
+          downloadWeaponsDeliveredReportPdf({
+            soldRows,
+            periodFrom: reportFrom,
+            periodTo: reportTo,
+          })
+        }}
       />
 
       <SaidaTermoPreviewModal

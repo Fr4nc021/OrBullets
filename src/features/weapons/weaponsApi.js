@@ -10,6 +10,7 @@ import {
   validateWeaponVendaFields,
 } from './weaponVendaHelpers.js'
 import {
+  buildArrivalNoteLine,
   buildWithdrawalNoteLine,
   rebuildWeaponNotesWithDelivery,
   setWeaponSerialInNotes,
@@ -341,7 +342,9 @@ export async function acquireWeaponSale(weaponId, input) {
       : String(current?.owner ?? '').trim()
   if (!owner) throw new Error('Cliente (dono) não encontrado nesta venda.')
 
-  const notes = setWeaponSerialInNotes(current?.notes, serial)
+  const withSerial = setWeaponSerialInNotes(current?.notes, serial)
+  const arrivalLine = buildArrivalNoteLine(new Date().toISOString())
+  const notes = withSerial ? `${withSerial}\n${arrivalLine}` : arrivalLine
   const payload = {
     status: 'em_estoque',
     owner,

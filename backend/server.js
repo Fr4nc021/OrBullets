@@ -1140,7 +1140,9 @@ function createApp(db, save, clubDb, saveClub) {
         return jsonError(res, 400, 'Cliente (dono) não encontrado nesta venda.')
       }
 
-      const notes = setWeaponSerialInNotes(current.notes, serial)
+      const withSerial = setWeaponSerialInNotes(current.notes, serial)
+      const arrivalLine = `Chegada (${new Date().toISOString()})`
+      const notes = withSerial ? `${withSerial}\n${arrivalLine}` : arrivalLine
       runDb(
         db,
         `UPDATE weapons SET status = 'em_estoque', owner = ?, notes = ? WHERE id = ?`,

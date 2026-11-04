@@ -66,20 +66,21 @@ function tableStylesBase(fontSize) {
   }
 }
 
-function rowToBody(r, responsibleCol) {
-  return [
-    r.model,
-    r.brand,
-    r.type,
-    r.caliber,
-    r.serial,
-    r.owner,
-    responsibleCol === 'dash' ? '—' : r.responsible,
-  ]
+function headFor(lastCol) {
+  if (lastCol !== 'arrival') return HEAD
+  return [[...HEAD[0].slice(0, -1), 'Data de chegada']]
+}
+
+function rowToBody(r, lastCol) {
+  let last = r.responsible
+  if (lastCol === 'dash') last = '—'
+  else if (lastCol === 'arrival') last = r.arrivalDate ?? '—'
+  return [r.model, r.brand, r.type, r.caliber, r.serial, r.owner, last]
 }
 
 /**
  * @param {object} p
+ * @param {Array} [p.arrivedRows] — chegaram no período
  * @param {Array} p.inStockShopRows — em estoque, dono = loja
  * @param {Array} p.inStockFixedOwnerRows — em estoque, dono fixo (cliente)
  * @param {Array} p.soldRows
@@ -88,6 +89,7 @@ function rowToBody(r, responsibleCol) {
  * @returns {import('jspdf').jsPDF}
  */
 export function buildWeaponsReportPdfDoc({
+  arrivedRows,
   inStockShopRows,
   inStockFixedOwnerRows,
   soldRows,
@@ -108,7 +110,7 @@ export function buildWeaponsReportPdfDoc({
   doc.setFontSize(8.5)
   const now = new Date()
   doc.text(
-    `Período (vendidas/retiradas): ${formatIsoDatePt(periodFrom)} a ${formatIsoDatePt(periodTo)}`,
+    `Período (chegadas e vendidas/retiradas): ${formatIsoDatePt(periodFrom)} a ${formatIsoDatePt(periodTo)}`,
     MARGIN,
     y,
   )
@@ -134,6 +136,11 @@ export function buildWeaponsReportPdfDoc({
 
   const minBottom = 16
   const sections = [
+    {
+      title: 'ARMAS QUE CHEGARAM (no período)',
+      rows: arrivedRows ?? [],
+      resp: 'arrival',
+    },
     {
       title: 'ARMAS EM ESTOQUE DA LOJA',
       rows: inStockShopRows ?? [],
@@ -176,7 +183,7 @@ export function buildWeaponsReportPdfDoc({
 
     autoTable(doc, {
       startY,
-      head: HEAD,
+      head: headFor(sec.resp),
       body,
       theme: 'grid',
       styles: tableStylesBase(7.5),
