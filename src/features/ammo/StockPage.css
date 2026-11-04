@@ -1100,6 +1100,27 @@
   font-style: italic;
 }
 
+/* Aviso quando a lista tem itens mas falta a NF (o campo fica no topo do diálogo) */
+.stock-entrada-nf-hint {
+  display: block;
+  width: 100%;
+  margin: 0 0 0.65rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fcd34d;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stock-entrada-nf-hint:hover {
+  background: rgba(251, 191, 36, 0.16);
+}
+
 .stock-dialog__actions--entrada button:last-child {
   border: none;
   color: #ecfdf5;
@@ -1465,6 +1486,8 @@
 .stock-report__pdf-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 1rem;
 }
 

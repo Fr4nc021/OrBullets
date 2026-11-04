@@ -69,6 +69,7 @@ export function StockMovementModal({
                 <label className="stock-dialog__field stock-entrada-panel__nf">
                   <span>Número da NF</span>
                   <input
+                    id="stock-entrada-nf"
                     type="text"
                     value={entradaNfNumber}
                     onChange={(e) => setEntradaNfNumber(e.target.value)}
@@ -396,6 +397,21 @@ export function StockMovementModal({
                           munição.
                         </p>
                       )}
+                      {entradaLines.length > 0 &&
+                      !String(entradaNfNumber ?? '').trim() ? (
+                        <button
+                          type="button"
+                          className="stock-entrada-nf-hint"
+                          onClick={() => {
+                            const nf = document.getElementById('stock-entrada-nf')
+                            nf?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                            nf?.focus({ preventScroll: true })
+                          }}
+                        >
+                          Falta o número da NF para registrar. Clique aqui para
+                          preencher.
+                        </button>
+                      ) : null}
                       <div className="stock-dialog__actions stock-dialog__actions--entrada">
                         <button
                           type="button"
