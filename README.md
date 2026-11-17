@@ -10,8 +10,8 @@ Os dados ficam num banco local (SQLite), no computador da loja. Quando há inter
 - **Movimentações.** Lista as últimas entradas e saídas do estoque e permite reabrir o termo de uma saída.
 - **Mapa mensal.** Guarda, mês a mês, os PDFs do relatório de estoque e do relatório de armas neste computador.
 - **Cadastro.** Cadastra calibres, produtos (munição, cartucho e insumo), marcas e tipos de arma.
-- **Clube.** Controla a produção de munição do clube: receitas, lotes, estoque de componentes e relatório.
-- **Armas.** Cadastra armas, registra vendas e entregas e gera os documentos em PDF (papel de venda, contrato e comprovante de entrega). Separa armas em estoque, armas vendidas que ainda serão compradas e armas retiradas no mês. Armas ainda não recebidas não entram no mapa nem no relatório.
+- **Clube.** Controla a produção de munição do clube: receitas, lotes, estoque de componentes e relatório. No desktop usa SQLite local com sync para o Supabase; na web (com Supabase configurado) lê e grava direto nas tabelas `orbullets_club_*`.
+- **Armas.** Cadastra armas, registra vendas e entregas e gera os documentos em PDF (papel de venda, contrato e comprovante de entrega). Separa armas em estoque, armas vendidas que ainda serão compradas e armas retiradas no mês. Armas ainda não recebidas não entram no mapa nem no relatório. **Declaração de vendas:** seleciona vendas e gera PDF com declaração da loja, dados dos clientes e das armas. **Arma em estoque com dono (cliente):** emite ou edita o documento de venda sem tirar a arma do estoque (entrega continua em *Registrar entrega*).
 - **Configurações.** Liga o aviso de estoque baixo. O aviso vale para qualquer computador ligado a este servidor.
 
 ## Como rodar

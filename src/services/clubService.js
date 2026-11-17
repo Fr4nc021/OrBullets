@@ -1,158 +1,107 @@
 /**
- * Estoque e produção do clube — API local (`/api/club/*`), ficheiro `club-database.db`.
- * Não usa o mesmo SQLite nem Supabase da loja.
+ * Estoque e produção do clube — API local ou Supabase (`orbullets_club_*`).
  */
-import { apiFetch } from './apiClient.js'
+import * as apiClubRepo from './repositories/apiClubRepository.js'
+import * as supabaseClubRepo from './repositories/supabaseClubRepository.js'
+import { isDesktopLocalApi } from './dataMode.js'
+
+function clubRepo() {
+  return isDesktopLocalApi() ? apiClubRepo : supabaseClubRepo
+}
 
 export async function fetchClubCalibers() {
-  return (await apiFetch('/api/club/calibers')) ?? []
+  return clubRepo().fetchClubCalibers()
 }
 
 export async function createClubCaliber(name) {
-  return apiFetch('/api/club/calibers', {
-    method: 'POST',
-    body: JSON.stringify({ name }),
-  })
+  return clubRepo().createClubCaliber(name)
 }
 
 export async function fetchClubItems(kind) {
-  const q = kind ? `?kind=${encodeURIComponent(kind)}` : ''
-  return (await apiFetch(`/api/club/items${q}`)) ?? []
+  return clubRepo().fetchClubItems(kind)
 }
 
 export async function createClubItem(name, kind) {
-  return apiFetch('/api/club/items', {
-    method: 'POST',
-    body: JSON.stringify({ name, kind }),
-  })
+  return clubRepo().createClubItem(name, kind)
 }
 
 /** @param {{ name?: string, kind?: string }} body */
 export async function updateClubItem(id, body) {
-  return apiFetch(`/api/club/items/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  })
+  return clubRepo().updateClubItem(id, body)
 }
 
-/** Define o saldo absoluto do item (lança movimento de ajuste). */
 export async function setClubItemBalance(id, quantity) {
-  return apiFetch(`/api/club/items/${encodeURIComponent(id)}/balance`, {
-    method: 'PATCH',
-    body: JSON.stringify({ quantity }),
-  })
+  return clubRepo().setClubItemBalance(id, quantity)
 }
 
 export async function deleteClubItem(id) {
-  return apiFetch(`/api/club/items/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  })
+  return clubRepo().deleteClubItem(id)
 }
 
 export async function clearClubItemMovements(id) {
-  return apiFetch(`/api/club/items/${encodeURIComponent(id)}/movements`, {
-    method: 'DELETE',
-  })
+  return clubRepo().clearClubItemMovements(id)
 }
 
 export async function updateClubCaliber(id, name) {
-  return apiFetch(`/api/club/calibers/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    body: JSON.stringify({ name }),
-  })
+  return clubRepo().updateClubCaliber(id, name)
 }
 
 export async function deleteClubCaliber(id) {
-  return apiFetch(`/api/club/calibers/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  })
+  return clubRepo().deleteClubCaliber(id)
 }
 
 export async function fetchClubStock() {
-  return (await apiFetch('/api/club/stock')) ?? []
+  return clubRepo().fetchClubStock()
 }
 
 export async function createClubStockMovement(body) {
-  return apiFetch('/api/club/stock/movements', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
+  return clubRepo().createClubStockMovement(body)
 }
 
 export async function fetchClubStockMovements(limit = 200) {
-  const q = `?limit=${encodeURIComponent(String(limit))}`
-  return (await apiFetch(`/api/club/stock/movements${q}`)) ?? []
+  return clubRepo().fetchClubStockMovements(limit)
 }
 
-/** @param {number|string} id @param {{ item_id?: string, type?: string, quantity?: number, date?: string, notes?: string|null }} body */
 export async function updateClubStockMovement(id, body) {
-  return apiFetch(`/api/club/stock/movements/${encodeURIComponent(String(id))}`, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  })
+  return clubRepo().updateClubStockMovement(id, body)
 }
 
 export async function deleteClubStockMovement(id) {
-  return apiFetch(`/api/club/stock/movements/${encodeURIComponent(String(id))}`, {
-    method: 'DELETE',
-  })
+  return clubRepo().deleteClubStockMovement(id)
 }
 
-/** Lista todas as receitas (com nomes de calibre e itens). */
 export async function fetchClubRecipes() {
-  return (await apiFetch('/api/club/recipes')) ?? []
+  return clubRepo().fetchClubRecipes()
 }
 
-/** @returns {Promise<object|null>} receita ou null se ainda não existir */
 export async function fetchClubRecipe(caliberId) {
-  return apiFetch(`/api/club/recipes/${encodeURIComponent(caliberId)}`)
+  return clubRepo().fetchClubRecipe(caliberId)
 }
 
 export async function deleteClubRecipe(caliberId) {
-  return apiFetch(`/api/club/recipes/${encodeURIComponent(caliberId)}`, {
-    method: 'DELETE',
-  })
+  return clubRepo().deleteClubRecipe(caliberId)
 }
 
 export async function saveClubRecipe(caliberId, body) {
-  return apiFetch(`/api/club/recipes/${encodeURIComponent(caliberId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  })
+  return clubRepo().saveClubRecipe(caliberId, body)
 }
 
 export async function postClubProduction(body) {
-  return apiFetch('/api/club/production', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
+  return clubRepo().postClubProduction(body)
 }
 
 export async function fetchClubProductionBatches(limit = 50) {
-  return (
-    (await apiFetch(`/api/club/production/batches?limit=${encodeURIComponent(String(limit))}`)) ??
-    []
-  )
+  return clubRepo().fetchClubProductionBatches(limit)
 }
 
 export async function updateClubProductionBatch(id, body) {
-  return apiFetch(`/api/club/production/batches/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  })
+  return clubRepo().updateClubProductionBatch(id, body)
 }
 
 export async function deleteClubProductionBatch(id) {
-  return apiFetch(`/api/club/production/batches/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  })
+  return clubRepo().deleteClubProductionBatch(id)
 }
 
-/** @param {string} [from] @param {string} [to] — YYYY-MM-DD ou ISO; omitir = histórico completo */
 export async function fetchClubReportSummary(from, to) {
-  const p = new URLSearchParams()
-  if (from) p.set('from', from)
-  if (to) p.set('to', to)
-  const q = p.toString() ? `?${p}` : ''
-  return apiFetch(`/api/club/report/summary${q}`)
+  return clubRepo().fetchClubReportSummary(from, to)
 }

@@ -1008,9 +1008,11 @@ function createApp(db, save, clubDb, saveClub) {
       if (!current) return jsonError(res, 404, 'Arma não encontrada.')
 
       const notes =
-        serial !== undefined
-          ? setWeaponSerialInNotes(current.notes, serial)
-          : current.notes
+        body.notes !== undefined && body.notes !== null
+          ? String(body.notes).trim() || null
+          : serial !== undefined
+            ? setWeaponSerialInNotes(current.notes, serial)
+            : current.notes
 
       runDb(
         db,

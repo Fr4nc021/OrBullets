@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import {
   createWeapon,
   createWeaponSale,
+  saveInStockWeaponSale,
   acquireWeaponSale,
   markWeaponPurchased,
   deleteWeapon,
@@ -16,6 +17,7 @@ import {
 } from './weaponsApi.js'
 import { parseLocalDateEnd, parseLocalDateStart } from '../ammo/ammoStockReport.js'
 import { SaidaTermoPreviewModal } from '../ammo/components/SaidaTermoPreviewModal.jsx'
+import { SoldWeaponsDeclarationModal } from './components/SoldWeaponsDeclarationModal.jsx'
 import { WeaponsReportModal } from './components/WeaponsReportModal.jsx'
 import { WeaponDeliverModal } from './components/WeaponDeliverModal.jsx'
 import { WeaponSaleModal } from './components/WeaponSaleModal.jsx'
@@ -55,6 +57,7 @@ import {
 } from './weaponsReportHelpers.js'
 import { downloadWeaponsReportPdf } from './weaponsReportPdf.js'
 import { downloadWeaponsDeliveredReportPdf } from './weaponsDeliveredReportPdf.js'
+import { downloadSoldWeaponsDeclarationPdf } from './weaponsSoldDeclarationPdf.js'
 import { productTypeLabel } from '../ammo/productTypes.js'
 import '../ammo/StockPage.css'
 import './WeaponsPage.css'
@@ -204,6 +207,48 @@ function isPurchasePipelineStatus(status) {
   return status === 'para_compra' || status === 'aguardando_chegada'
 }
 
+function saleFormFromWeapon(weapon, parsed = null) {
+  const serialFromNotes = parseWeaponSerialFromNotes(weapon?.notes)
+  const ownerTrim = (weapon?.owner ?? '').trim()
+  const base = emptySaleForm({
+    weaponTypeId: weapon?.weapon_type_id,
+    brandId: weapon?.brand_id,
+    caliberId: weapon?.caliber_id,
+  })
+  base.name = weapon?.name ?? ''
+  base.serial =
+    parsed?.serial ||
+    (serialFromNotes !== '—' ? serialFromNotes : '')
+  if (!isShopStockOwner(ownerTrim)) {
+    base.clientName = ownerTrim
+  }
+  if (parsed) {
+    base.saleDate = parsed.saleDate ?? base.saleDate
+    base.paymentMethod = parsed.paymentMethod ?? ''
+    base.weaponValue =
+      parsed.weaponValue != null && Number.isFinite(Number(parsed.weaponValue))
+        ? String(parsed.weaponValue)
+        : ''
+    base.docsValue =
+      parsed.docsValue != null && Number.isFinite(Number(parsed.docsValue))
+        ? String(parsed.docsValue)
+        : ''
+    base.docProcesses = parsed.docProcesses ?? []
+    base.clientIdentity = parsed.clientIdentity ?? ''
+    base.clientCpf = parsed.clientCpf ?? ''
+    base.clientPhone = parsed.clientPhone ?? ''
+    base.clientAddress = parsed.clientAddress ?? ''
+    base.clientNumber = parsed.clientNumber ?? ''
+    base.clientNeighborhood = parsed.clientNeighborhood ?? ''
+    base.clientCity = parsed.clientCity ?? ''
+    base.clientCep = parsed.clientCep ?? ''
+    base.seller = parsed.seller ?? ''
+    base.obs = parsed.obs ?? ''
+    if (!base.clientName && ownerTrim) base.clientName = ownerTrim
+  }
+  return base
+}
+
 function emptySaleForm(defaults = {}) {
   return {
     saleDate: todayLocalDateInput(),
@@ -297,6 +342,8 @@ export default function WeaponsPage() {
   const [vendaPreviewTest, setVendaPreviewTest] = useState(false)
 
   const [saleOpen, setSaleOpen] = useState(false)
+  /** Arma em estoque ao gravar documento de venda (null = venda nova → para_compra). */
+  const [saleStockWeapon, setSaleStockWeapon] = useState(null)
   const [saleForm, setSaleForm] = useState(() => emptySaleForm())
   const [saleValidationError, setSaleValidationError] = useState('')
   const [busySale, setBusySale] = useState(false)
@@ -310,6 +357,7 @@ export default function WeaponsPage() {
   const [busyAcquireId, setBusyAcquireId] = useState(null)
 
   const [reportOpen, setReportOpen] = useState(false)
+  const [declarationOpen, setDeclarationOpen] = useState(false)
   const [reportLoading, setReportLoading] = useState(false)
   const [reportFrom, setReportFrom] = useState(
     () => defaultWeaponsReportDateRange().from,
@@ -829,6 +877,7 @@ export default function WeaponsPage() {
   }
 
   function openSale() {
+    setSaleStockWeapon(null)
     setSaleForm(
       emptySaleForm({
         weaponTypeId,
@@ -841,9 +890,28 @@ export default function WeaponsPage() {
     setMessage({ type: '', text: '' })
   }
 
+  function openSaleForStockWeapon(weapon) {
+    if (!weapon || weapon.status !== 'em_estoque') return
+    const ownerTrim = (weapon.owner ?? '').trim()
+    if (isShopStockOwner(ownerTrim)) {
+      showMessage(
+        'error',
+        'Informe o cliente no campo Dono (não use «estoque») para emitir o documento de venda.',
+      )
+      return
+    }
+    const parsed = parseVendaFromNotes(weapon.notes)
+    setSaleStockWeapon(weapon)
+    setSaleForm(saleFormFromWeapon(weapon, parsed))
+    setSaleValidationError('')
+    setSaleOpen(true)
+    setMessage({ type: '', text: '' })
+  }
+
   function closeSale() {
     if (busySale) return
     setSaleOpen(false)
+    setSaleStockWeapon(null)
     setSaleValidationError('')
   }
 
@@ -945,8 +1013,10 @@ export default function WeaponsPage() {
       ownerName = saleForm.clientName
     }
 
+    const notesWeapon = weapon ?? saleStockWeapon
+
     const payload = buildVendaPdfPayload(
-      { owner: ownerName, notes: weapon?.notes, name: form.name },
+      { owner: ownerName, notes: notesWeapon?.notes, name: form.name },
       labels,
       form,
     )
@@ -1023,13 +1093,19 @@ export default function WeaponsPage() {
     setBusySale(true)
     setMessage({ type: '', text: '' })
     try {
-      await createWeaponSale({
+      const payload = {
         ...saleForm,
         weaponTypeName: weaponTypes.find((t) => t.id === saleForm.weaponTypeId)?.name,
         weaponValue: parseMoneyInput(saleForm.weaponValue),
         docsValue: parseMoneyInput(saleForm.docsValue),
-      })
-      showMessage('success', 'Venda registrada. Arma na lista para compra.')
+      }
+      if (saleStockWeapon) {
+        await saveInStockWeaponSale(saleStockWeapon.id, payload)
+        showMessage('success', 'Documento de venda gravado. A arma continua em estoque.')
+      } else {
+        await createWeaponSale(payload)
+        showMessage('success', 'Venda registrada. Arma na lista para compra.')
+      }
       return true
     } catch (e) {
       showMessage('error', e.message ?? 'Erro ao registrar venda.')
@@ -1042,6 +1118,7 @@ export default function WeaponsPage() {
   function finalizeSaleAfterPreview() {
     closeComprovantePreview()
     setSaleOpen(false)
+    setSaleStockWeapon(null)
     setSaleValidationError('')
     loadWeapons()
   }
@@ -1196,6 +1273,43 @@ export default function WeaponsPage() {
     )
   }, [reportRowsAll, reportError])
 
+  const saleDeclarationRows = useMemo(() => {
+    return weapons
+      .map((w) => {
+        const venda = parseVendaFromNotes(w.notes)
+        if (!venda) return null
+        const serialFromNotes = parseWeaponSerialFromNotes(w.notes)
+        return {
+          id: w.id,
+          statusLabel: statusLabel(w.status),
+          clientName: (w.owner ?? '').trim() || '—',
+          clientIdentity: venda.clientIdentity,
+          clientCpf: venda.clientCpf,
+          clientPhone: venda.clientPhone,
+          clientAddress: venda.clientAddress,
+          clientNumber: venda.clientNumber,
+          clientNeighborhood: venda.clientNeighborhood,
+          clientCity: venda.clientCity,
+          clientCep: venda.clientCep,
+          saleDate: venda.saleDate,
+          paymentMethod: venda.paymentMethod,
+          weaponValue: venda.weaponValue,
+          docsValue: venda.docsValue,
+          total: venda.total,
+          seller: venda.seller,
+          docProcesses: venda.docProcesses,
+          obs: venda.obs,
+          type: typeNameById[w.weapon_type_id] ?? '—',
+          brand: brandNameById[w.brand_id] ?? '—',
+          model: w.name ?? '—',
+          caliber: caliberNameById[w.caliber_id] ?? '—',
+          serial: venda.serial || (serialFromNotes === '—' ? '' : serialFromNotes),
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => String(b.saleDate).localeCompare(String(a.saleDate)))
+  }, [weapons, typeNameById, brandNameById, caliberNameById])
+
   const soldRows = useMemo(() => {
     if (reportError) return []
     const { startMs, endMs } = reportPeriod
@@ -1258,6 +1372,13 @@ export default function WeaponsPage() {
           {message.text}
         </div>
       ) : null}
+
+      <SoldWeaponsDeclarationModal
+        open={declarationOpen}
+        onClose={() => setDeclarationOpen(false)}
+        rows={saleDeclarationRows}
+        onExport={(picked) => downloadSoldWeaponsDeclarationPdf(picked)}
+      />
 
       <WeaponsReportModal
         open={reportOpen}
@@ -1322,7 +1443,9 @@ export default function WeaponsPage() {
         }
         hintPreview={
           docPreviewKind === 'venda'
-            ? 'Confira o PDF abaixo. Ao confirmar, a venda é registrada e a arma vai para Armas para compra.'
+            ? saleStockWeapon
+              ? 'Confira o PDF abaixo. Ao confirmar, os dados da venda são gravados nesta arma em estoque.'
+              : 'Confira o PDF abaixo. Ao confirmar, a venda é registrada e a arma vai para Armas para compra.'
             : deliverMode === 'edit' && !comprovanteReadOnly
               ? 'Confira o PDF abaixo. Ao confirmar, os dados da entrega são atualizados.'
               : 'Confira o PDF abaixo. Ao confirmar, a retirada é registrada. Use Imprimir ou Baixar PDF para entregar ao cliente.'
@@ -1336,7 +1459,9 @@ export default function WeaponsPage() {
         }
         confirmLabel={
           docPreviewKind === 'venda'
-            ? 'Confirmar venda'
+            ? saleStockWeapon
+              ? 'Gravar documento'
+              : 'Confirmar venda'
             : deliverMode === 'edit'
               ? 'Salvar alterações'
               : 'Confirmar saída'
@@ -1380,6 +1505,14 @@ export default function WeaponsPage() {
 
       <WeaponSaleModal
         open={saleOpen && !(comprovantePreviewOpen && docPreviewKind === 'venda')}
+        title={
+          saleStockWeapon ? 'Documento de venda (arma em estoque)' : 'Registrar venda de arma'
+        }
+        intro={
+          saleStockWeapon
+            ? 'Complete os dados do cliente e da venda. A arma permanece em estoque; use Registrar entrega quando o cliente retirar.'
+            : undefined
+        }
         weaponTypes={weaponTypes}
         weaponBrands={weaponBrands}
         calibers={calibers}
@@ -1743,6 +1876,14 @@ export default function WeaponsPage() {
         </button>
         <button
           type="button"
+          className="weapons-page__report"
+          onClick={() => setDeclarationOpen(true)}
+          disabled={loadingWeaponMeta || loadingCalibers}
+        >
+          Declaração de vendas
+        </button>
+        <button
+          type="button"
           className="weapons-page__refresh"
           onClick={() => {
             loadCalibers()
@@ -1983,7 +2124,15 @@ export default function WeaponsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredWeaponsInStock.map((w) => (
+                filteredWeaponsInStock.map((w) => {
+                  const ownerIsShop = isShopStockOwner(w.owner)
+                  const vendaStock = parseVendaFromNotes(w.notes)
+                  const rowBusy =
+                    busyDeliverId === w.id ||
+                    busyEditId === w.id ||
+                    busyDeleteId === w.id ||
+                    busySale
+                  return (
                   <tr key={w.id}>
                     <td>{w.name}</td>
                     <td>{brandNameById[w.brand_id] ?? '—'}</td>
@@ -1996,36 +2145,56 @@ export default function WeaponsPage() {
                       <WeaponIconButton
                         kind="edit"
                         label="Editar dados da arma"
-                        disabled={
-                          busyDeliverId === w.id ||
-                          busyEditId === w.id ||
-                          busyDeleteId === w.id
-                        }
+                        disabled={rowBusy}
                         onClick={() => openEdit(w)}
                       />
+                      {!ownerIsShop ? (
+                        vendaStock ? (
+                          <>
+                            <WeaponIconButton
+                              kind="receipt"
+                              label="Ver PDF do documento de venda"
+                              disabled={rowBusy}
+                              onClick={() =>
+                                openVendaPdfPreview({ readOnly: true, weapon: w })
+                              }
+                            />
+                            <WeaponIconButton
+                              kind="receipt"
+                              label="Editar dados do documento de venda"
+                              caption="Editar doc."
+                              showLabel
+                              disabled={rowBusy}
+                              onClick={() => openSaleForStockWeapon(w)}
+                            />
+                          </>
+                        ) : (
+                          <WeaponIconButton
+                            kind="receipt"
+                            label="Emitir documento de venda"
+                            caption="Doc. venda"
+                            showLabel
+                            disabled={rowBusy}
+                            onClick={() => openSaleForStockWeapon(w)}
+                          />
+                        )
+                      ) : null}
                       <WeaponIconButton
                         kind="clipboard"
                         label="Registrar entrega da arma"
-                        disabled={
-                          busyDeliverId === w.id ||
-                          busyEditId === w.id ||
-                          busyDeleteId === w.id
-                        }
+                        disabled={rowBusy}
                         onClick={() => openDeliver(w)}
                       />
                       <WeaponIconButton
                         kind="delete"
                         label="Excluir arma"
-                        disabled={
-                          busyDeliverId === w.id ||
-                          busyEditId === w.id ||
-                          busyDeleteId === w.id
-                        }
+                        disabled={rowBusy}
                         onClick={() => handleDeleteWeapon(w)}
                       />
                     </td>
                   </tr>
-                ))
+                  )
+                })
               )}
             </tbody>
           </table>

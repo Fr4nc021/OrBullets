@@ -26,6 +26,7 @@ import {
   updateClubStockMovement,
 } from '../../services/clubService.js'
 import { isDesktopLocalApi } from '../../services/dataMode.js'
+import { supabase } from '../../services/supabase.js'
 import { downloadClubReportPdf } from './clubReportPdf.js'
 import {
   formatGramsHint,
@@ -60,7 +61,9 @@ function datetimeLocalToIso(s) {
 }
 
 export default function ClubPage() {
-  const desktop = isDesktopLocalApi()
+  const desktopLocal = isDesktopLocalApi()
+  const modoClubeAtivo = desktopLocal || supabase != null
+  const syncDocNaWeb = modoClubeAtivo && !desktopLocal
 
   const [calibers, setCalibers] = useState([])
   const [items, setItems] = useState([])
@@ -128,7 +131,7 @@ export default function ClubPage() {
   const [recipeInline, setRecipeInline] = useState(null)
   const [recipeSaving, setRecipeSaving] = useState(false)
 
-  const [clubNav, setClubNav] = useState('producao')
+  const [clubNav, setClubNav] = useState('cadastro')
 
   const showMessage = useCallback((type, text) => {
     setMsg({ type, text })
@@ -145,7 +148,7 @@ export default function ClubPage() {
   }, [recipeInline])
 
   const loadAll = useCallback(async () => {
-    if (!desktop) return
+    if (!modoClubeAtivo) return
     setLoading(true)
     try {
       const [c, it, st, b] = await Promise.all([
@@ -166,14 +169,14 @@ export default function ClubPage() {
     } finally {
       setLoading(false)
     }
-  }, [desktop, showMessage])
+  }, [modoClubeAtivo, showMessage])
 
   useEffect(() => {
     loadAll()
   }, [loadAll])
 
   const loadReport = useCallback(async () => {
-    if (!desktop) return
+    if (!modoClubeAtivo) return
     setReportLoading(true)
     try {
       const data = await fetchClubReportSummary(
@@ -187,7 +190,7 @@ export default function ClubPage() {
     } finally {
       setReportLoading(false)
     }
-  }, [desktop, reportFrom, reportTo, showMessage])
+  }, [modoClubeAtivo, reportFrom, reportTo, showMessage])
 
   const polvoraItems = useMemo(
     () => items.filter((i) => i.kind === 'polvora'),
@@ -234,7 +237,7 @@ export default function ClubPage() {
   }
 
   useEffect(() => {
-    if (!desktop || !recipeCaliberId) return
+    if (!modoClubeAtivo || !recipeCaliberId) return
     let cancelled = false
     ;(async () => {
       try {
@@ -279,10 +282,10 @@ export default function ClubPage() {
     return () => {
       cancelled = true
     }
-  }, [desktop, recipeCaliberId])
+  }, [modoClubeAtivo, recipeCaliberId])
 
   useEffect(() => {
-    if (!desktop || clubNav !== 'movimentos') return
+    if (!modoClubeAtivo || clubNav !== 'movimentos') return
     let cancelled = false
     setMovementsLoading(true)
     fetchClubStockMovements(250)
@@ -301,20 +304,20 @@ export default function ClubPage() {
     return () => {
       cancelled = true
     }
-  }, [desktop, clubNav, showMessage])
+  }, [modoClubeAtivo, clubNav, showMessage])
 
   const reloadRecipeList = useCallback(async () => {
-    if (!desktop) return
+    if (!modoClubeAtivo) return
     try {
       const rows = await fetchClubRecipes()
       setRecipeList(Array.isArray(rows) ? rows : [])
     } catch {
       setRecipeList([])
     }
-  }, [desktop])
+  }, [modoClubeAtivo])
 
   useEffect(() => {
-    if (!desktop || clubNav !== 'producao') return
+    if (!modoClubeAtivo || clubNav !== 'producao') return
     let cancelled = false
     setRecipeListLoading(true)
     fetchClubRecipes()
@@ -330,7 +333,7 @@ export default function ClubPage() {
     return () => {
       cancelled = true
     }
-  }, [desktop, clubNav])
+  }, [modoClubeAtivo, clubNav])
 
   function focusRecipeForm(caliberId) {
     setRecipeCaliberId(caliberId)
@@ -819,13 +822,13 @@ export default function ClubPage() {
     }
   }
 
-  if (!desktop) {
+  if (!modoClubeAtivo) {
     return (
       <div className="club-page club-page--offline">
         <div className="club-page__banner club-page__banner--warn club-page__banner--sticky">
-          O estoque do clube está disponível apenas no aplicativo desktop com servidor local
-          ativo. A loja continua usando o cadastro e o estoque habituais (e Supabase, quando
-          configurado); o clube usa outro ficheiro de base de dados no PC.
+          O estoque do clube precisa do OrBullets desktop com servidor local ou do Supabase
+          configurado (VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no .env). A loja continua
+          separada deste estoque.
         </div>
       </div>
     )
@@ -851,14 +854,14 @@ export default function ClubPage() {
               <button
                 type="button"
                 className={
-                  clubNav === 'producao'
+                  clubNav === 'cadastro'
                     ? 'club-page__nav-item club-page__nav-item--active'
                     : 'club-page__nav-item'
                 }
-                aria-current={clubNav === 'producao' ? 'page' : undefined}
-                onClick={() => setClubNav('producao')}
+                aria-current={clubNav === 'cadastro' ? 'page' : undefined}
+                onClick={() => setClubNav('cadastro')}
               >
-                Produção
+                Cadastro
               </button>
             </li>
             <li>
@@ -907,14 +910,14 @@ export default function ClubPage() {
               <button
                 type="button"
                 className={
-                  clubNav === 'cadastro'
+                  clubNav === 'producao'
                     ? 'club-page__nav-item club-page__nav-item--active'
                     : 'club-page__nav-item'
                 }
-                aria-current={clubNav === 'cadastro' ? 'page' : undefined}
-                onClick={() => setClubNav('cadastro')}
+                aria-current={clubNav === 'producao' ? 'page' : undefined}
+                onClick={() => setClubNav('producao')}
               >
-                Cadastro
+                Produção
               </button>
             </li>
             <li>
@@ -933,6 +936,26 @@ export default function ClubPage() {
             </li>
           </ul>
         </nav>
+      </div>
+
+      <div
+        className="club-page__banner club-page__banner--info"
+        role="note"
+        aria-live="polite"
+      >
+        <strong>Sincronização com o OrBullets desktop.</strong> No PC servidor, o SQLite local do
+        clube é a fonte da verdade: na cópia para o Supabase, podem ser apagados calibres, itens,
+        receitas, lotes e movimentos que não existam nesse banco, além de movimentos sem{' '}
+        <code>local_id</code>. Alterações feitas aqui na nuvem podem desaparecer no próximo sync,
+        exceto se o desktop não estiver sincronizando o clube. Se o SQLite local do clube estiver
+        vazio, o sync não altera a nuvem.
+        {syncDocNaWeb ? (
+          <>
+            {' '}
+            Neste modo você grava direto no Supabase; movimentos novos recebem um{' '}
+            <code>local_id</code> para o desktop reconhecer.
+          </>
+        ) : null}
       </div>
 
       <div className="club-page__scroll">

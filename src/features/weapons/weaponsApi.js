@@ -305,6 +305,87 @@ export async function createWeaponSale(input) {
 }
 
 /**
+ * Grava documento de venda numa arma já em estoque (com dono/cliente).
+ * Mantém status `em_estoque`; os dados comerciais vão em `notes`.
+ * @param {string} weaponId
+ * @param {object} input — mesmo formato de {@link createWeaponSale}
+ */
+export async function saveInStockWeaponSale(weaponId, input) {
+  const err = validateWeaponVendaFields(input)
+  if (err) throw new Error(err)
+
+  const trimmedName = String(input.name ?? '').trim()
+  const clientName = String(input.clientName ?? '').trim()
+  const legacyType = (input.weaponTypeName ?? '').trim() || '—'
+  const serial = String(input.serial ?? '').trim()
+
+  const saleInput = {
+    ...input,
+    weaponValue: parseMoneyInput(input.weaponValue),
+    docsValue: parseMoneyInput(input.docsValue),
+  }
+  const vendaLines = buildVendaNoteLines(saleInput)
+
+  if (isDesktopLocalApi()) {
+    const weapons = await apiWeapons.fetchWeaponsRows()
+    const current = (weapons ?? []).find((w) => String(w.id) === String(weaponId))
+    if (!current) throw new Error('Arma não encontrada.')
+    if (current.status !== 'em_estoque') {
+      throw new Error('Só é possível gravar documento de venda para armas em estoque.')
+    }
+    const notes = buildNotesWithVenda(current.notes, vendaLines, serial)
+    await apiWeapons.updateWeaponDetailsRow(weaponId, {
+      name: trimmedName,
+      weapon_type_id: input.weaponTypeId,
+      brand_id: input.brandId,
+      caliber_id: input.caliberId,
+      owner: clientName,
+      type: legacyType,
+      notes,
+    })
+    return
+  }
+
+  const { data: current, error: fetchErr } = await supabase
+    .from(T.weapons)
+    .select('notes, status')
+    .eq('id', weaponId)
+    .single()
+
+  if (fetchErr) throw new Error(formatSupabaseError(fetchErr))
+  if (current?.status !== 'em_estoque') {
+    throw new Error('Só é possível gravar documento de venda para armas em estoque.')
+  }
+
+  const notes = buildNotesWithVenda(current?.notes, vendaLines, serial)
+  const payload = {
+    name: trimmedName,
+    weapon_type_id: input.weaponTypeId,
+    brand_id: input.brandId,
+    caliber_id: input.caliberId,
+    owner: clientName,
+    type: legacyType,
+    notes,
+    status: 'em_estoque',
+  }
+
+  let { error } = await supabase.from(T.weapons).update(payload).eq('id', weaponId)
+
+  if (error && payload.notes != null && isMissingNotesColumnError(error)) {
+    throw new Error(
+      'Coluna notes indisponível. Execute supabase/sql/weapons_notes.sql para gravar vendas.',
+    )
+  }
+
+  if (error && payload.type !== undefined && isMissingTypeColumnError(error)) {
+    const { type: _omitType, ...withoutType } = payload
+    ;({ error } = await supabase.from(T.weapons).update(withoutType).eq('id', weaponId))
+  }
+
+  if (error) throw new Error(formatSupabaseError(error))
+}
+
+/**
  * Adquire arma vendida: preenche S/N e move para estoque (loja ou dono = comprador).
  * @param {string} weaponId
  * @param {{ serial: string, destination: 'estoque' | 'dono' }} input

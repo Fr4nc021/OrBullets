@@ -21,6 +21,8 @@ export function WeaponSaleModal({
   onClose,
   onRequestPdf,
   onRequestTestPrint,
+  title = 'Registrar venda de arma',
+  intro,
 }) {
   if (!open) return null
 
@@ -48,8 +50,14 @@ export function WeaponSaleModal({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h2 id="weapons-sale-title" className="weapons-dialog__title">
-          Registrar venda de arma
+          {title}
         </h2>
+
+        {intro ? (
+          <p className="weapons-dialog__hint" style={{ marginTop: 0 }}>
+            {intro}
+          </p>
+        ) : null}
 
         {validationError ? (
           <p className="weapons-dialog__validation" role="alert">

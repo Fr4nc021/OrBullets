@@ -825,3 +825,15 @@
   font-variant-numeric: normal;
   white-space: normal;
 }
+
+.sold-declaration-table__check {
+  width: 2.4rem;
+  text-align: center !important;
+}
+
+.sold-declaration-table__count {
+  margin-right: auto;
+  align-self: center;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}

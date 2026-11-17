@@ -50,6 +50,14 @@
   border-color: rgba(251, 191, 36, 0.35);
 }
 
+.club-page > .club-page__banner {
+  flex-shrink: 0;
+  max-width: 72rem;
+  width: calc(100% - 1.5rem);
+  margin: 0 auto 0.5rem;
+  box-sizing: border-box;
+}
+
 .club-page__msg-slot {
   min-height: 0;
 }

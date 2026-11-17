@@ -63,7 +63,7 @@ export async function updateWeaponRow(weaponId, body) {
 
 /**
  * @param {string} weaponId
- * @param {{ name: string, weapon_type_id: string, brand_id: string, caliber_id: string, owner: string, type?: string, serial?: string }} body
+ * @param {{ name: string, weapon_type_id: string, brand_id: string, caliber_id: string, owner: string, type?: string, serial?: string, notes?: string|null }} body
  */
 export async function updateWeaponDetailsRow(weaponId, body) {
   return apiFetch(
