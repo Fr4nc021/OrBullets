@@ -1,4 +1,5 @@
 import { productTypeLabel } from '../productTypes.js'
+import { lotDisplay } from '../ammoLots.js'
 
 export function StockMovementModal({
   dialog,
@@ -25,6 +26,12 @@ export function StockMovementModal({
   setSelectedAmmoId,
   qtyInput,
   setQtyInput,
+  lotInput,
+  setLotInput,
+  entradaLotRequired,
+  saidaLot,
+  setSaidaLot,
+  saidaLotOptions,
   selectRef,
   ammoOptions,
   saidaStep,
@@ -302,6 +309,24 @@ export function StockMovementModal({
                           </p>
                         ) : null}
                         <label className="stock-dialog__field">
+                          <span>
+                            Número do lote
+                            {entradaLotRequired ? '' : ' (opcional)'}
+                          </span>
+                          <input
+                            type="text"
+                            value={lotInput}
+                            onChange={(e) => setLotInput(e.target.value)}
+                            disabled={
+                              saving ||
+                              ammoOptionsForEntradaStep3.length === 0
+                            }
+                            placeholder="Ex.: AB1234"
+                            autoComplete="off"
+                            maxLength={60}
+                          />
+                        </label>
+                        <label className="stock-dialog__field">
                           <span>Quantidade</span>
                           <input
                             type="number"
@@ -350,6 +375,7 @@ export function StockMovementModal({
                                   <th>Tipo</th>
                                   <th>Nome</th>
                                   <th>Calibre</th>
+                                  <th>Lote</th>
                                   <th>Qtd.</th>
                                   <th>Data de lançamento</th>
                                   <th aria-label="Remover" />
@@ -361,6 +387,7 @@ export function StockMovementModal({
                                     <td>{line.productTypeLabel}</td>
                                     <td>{line.ammoName}</td>
                                     <td>{line.caliber}</td>
+                                    <td>{lotDisplay(line.lotNumber)}</td>
                                     <td className="stock-entrada-list__qty">
                                       {line.quantity}
                                     </td>
@@ -678,6 +705,31 @@ export function StockMovementModal({
                           </p>
                         ) : null}
                         <label className="stock-dialog__field">
+                          <span>Lote</span>
+                          <select
+                            value={saidaLot}
+                            onChange={(e) => setSaidaLot(e.target.value)}
+                            disabled={saving || saidaLotOptions.length === 0}
+                          >
+                            {saidaLotOptions.length === 0 ? (
+                              <option value="">Sem saldo para dar saída</option>
+                            ) : (
+                              saidaLotOptions.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {lotDisplay(o.lot_number)} — disponível{' '}
+                                  {o.available}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </label>
+                        {saidaLotOptions.some((o) => o.lot_number == null) ? (
+                          <p className="stock-dialog__lot-hint">
+                            Este produto ainda tem saldo sem lote. Distribua em
+                            lotes pelo botão Lotes na tabela de estoque.
+                          </p>
+                        ) : null}
+                        <label className="stock-dialog__field">
                           <span>Quantidade</span>
                           <input
                             type="number"
@@ -706,7 +758,8 @@ export function StockMovementModal({
                             disabled={
                               saving ||
                               ammoOptionsForSaidaStep3.length === 0 ||
-                              !selectedAmmoId
+                              !selectedAmmoId ||
+                              !saidaLot
                             }
                           >
                             Adicionar à lista
@@ -733,6 +786,7 @@ export function StockMovementModal({
                                   <th>Tipo</th>
                                   <th>Nome</th>
                                   <th>Calibre</th>
+                                  <th>Lote</th>
                                   <th>Qtd.</th>
                                   <th>Data de lançamento</th>
                                   <th aria-label="Remover" />
@@ -746,6 +800,7 @@ export function StockMovementModal({
                                       {line.ammoName ?? line.fullName}
                                     </td>
                                     <td>{line.caliber ?? '—'}</td>
+                                    <td>{lotDisplay(line.lotNumber)}</td>
                                     <td className="stock-saida-list__qty">
                                       {line.quantity}
                                     </td>

@@ -1775,3 +1775,282 @@
 .stock-termo-dialog__btn-secondary {
   background: rgba(255, 255, 255, 0.08);
 }
+
+/* ---------------------------------------------------------------------------
+ * Lotes
+ * ------------------------------------------------------------------------ */
+.stock-dialog--lots {
+  max-width: min(34rem, 100vw - 2rem);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.stock-lots__product {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0 0 0.9rem;
+  color: var(--text-h);
+}
+
+.stock-lots__product span {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.stock-lots__table,
+.stock-lot-report__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.stock-lots__table th,
+.stock-lots__table td,
+.stock-lot-report__table th,
+.stock-lot-report__table td {
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.stock-lots__table th,
+.stock-lot-report__table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-h);
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.stock-lots__table tfoot td {
+  font-weight: 700;
+  color: var(--text-h);
+  border-bottom: none;
+}
+
+.stock-lots__num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-lots__row--pending td,
+.stock-lots__pending-text {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.stock-lots__form {
+  margin-top: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.stock-lots__subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-h);
+}
+
+.stock-lots__line {
+  display: grid;
+  grid-template-columns: 1fr 8rem auto;
+  gap: 0.6rem;
+  align-items: end;
+}
+
+.stock-lots__line .stock-dialog__field {
+  margin: 0;
+}
+
+.stock-lots__remove,
+.stock-lots__add,
+.stock-lots__history button,
+.stock-page__lots-btn,
+.stock-lot-report__product {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-h);
+  padding: 0.4rem 0.7rem;
+}
+
+.stock-lots__remove {
+  padding: 0.45rem 0.7rem;
+  margin-bottom: 0.1rem;
+}
+
+.stock-lots__add {
+  align-self: flex-start;
+  font-size: 0.85rem;
+}
+
+.stock-lots__remove:hover:not(:disabled),
+.stock-lots__add:hover:not(:disabled),
+.stock-lots__history button:hover:not(:disabled),
+.stock-page__lots-btn:hover:not(:disabled),
+.stock-lot-report__product:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.stock-lots__remaining {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.stock-lots__remaining--over,
+.stock-lots__error {
+  color: #fecaca;
+}
+
+.stock-lots__error {
+  margin: 0.75rem 0 0;
+  font-size: 0.88rem;
+}
+
+.stock-lots__done {
+  margin: 1rem 0 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.stock-lots__history {
+  margin-top: 1.1rem;
+}
+
+.stock-lots__history ul {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.stock-lots__history li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.88rem;
+  color: var(--text-h);
+}
+
+.stock-lots__history small {
+  color: var(--text-muted);
+}
+
+.stock-lots__history button {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.6rem;
+}
+
+/* Coluna de lotes na tabela de estoque */
+.stock-page__lots-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.stock-page__lot-chip {
+  font-size: 0.78rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 9999px;
+  background: rgba(74, 111, 165, 0.18);
+  border: 1px solid var(--accent-border);
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.stock-page__lot-chip--pending {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #fbbf24;
+}
+
+.stock-page__lots-btn {
+  font-size: 0.78rem;
+  padding: 0.15rem 0.55rem;
+}
+
+/* Relatório por lote */
+.stock-lot-report__filters {
+  align-items: center;
+}
+
+.stock-lot-report__check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.stock-lot-report__summary {
+  margin: 0 0 0.9rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.stock-lot-report__summary strong {
+  color: #fbbf24;
+}
+
+.stock-lot-report__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-height: min(65vh, 40rem);
+  overflow: auto;
+}
+
+.stock-lot-report__type h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1.02rem;
+  color: var(--text-h);
+}
+
+.stock-lot-report__caliber {
+  margin-bottom: 0.9rem;
+}
+
+.stock-lot-report__caliber h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
+  color: var(--accent-bright);
+}
+
+.stock-lot-report__first td {
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.stock-lot-report__table td[rowspan] {
+  vertical-align: middle;
+}
+
+.stock-lot-report__product {
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.stock-lot-report__product:hover {
+  background: none;
+  color: var(--accent-bright);
+}
+
+.stock-dialog__lot-hint {
+  margin: -0.2rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}

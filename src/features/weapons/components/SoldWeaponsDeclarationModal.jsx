@@ -91,9 +91,8 @@ export function SoldWeaponsDeclarationModal({ open, onClose, rows, onExport }) {
           </button>
         </div>
         <p className="stock-report__intro">
-          Marque as vendas que entram no PDF. A declaração traz os dados dos
-          clientes e, em seguida, os dados das armas. Só aparecem armas com
-          venda registrada.
+          Marque as vendas que entram no PDF. A declaração traz uma tabela de
+          clientes e outra de armas. Só aparecem armas com venda registrada.
         </p>
         <form className="stock-report__filters" onSubmit={(e) => e.preventDefault()}>
           <label className="stock-report__field stock-report__field--grow">

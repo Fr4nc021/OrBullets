@@ -6,6 +6,14 @@ const { openDatabase, openClubDatabase } = require('./db.js')
 const { registerClubRoutes } = require('./clubRoutes.js')
 const { registerAlertRoutes } = require('./alertRoutes.js')
 const { safeSyncAfterStockChange } = require('./alertsLowStock.js')
+const {
+  LOT_REQUIRED_PRODUCT_TYPES,
+  normalizeLotNumber,
+  lotKey,
+  checkLotDeltas,
+  movementEffect,
+  registerAmmoLotRoutes,
+} = require('./ammoLots.js')
 const syncOutbox = require('./syncOutbox.js')
 const {
   pushOnce: pushSupabaseOnce,
@@ -54,6 +62,20 @@ function runDb(db, sql, params = []) {
 
 function jsonError(res, status, message) {
   return res.status(status).json({ error: message })
+}
+
+/** Linha de ammo_movements no formato enviado ao Supabase. */
+function movementSyncPayload(m) {
+  return {
+    local_id: m.id,
+    ammo_type_id: m.ammo_type_id,
+    quantity: m.quantity,
+    type: m.type,
+    date: m.date,
+    saida_group_id: m.saida_group_id ?? null,
+    nf_number: m.nf_number ?? null,
+    lot_number: m.lot_number ?? null,
+  }
 }
 
 /**
@@ -113,6 +135,8 @@ function createApp(db, save, clubDb, saveClub) {
       op,
       payload: payload ?? null,
     })
+
+  registerAmmoLotRoutes(app, { db, save, qShop, jsonError, crypto })
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, dbId: dbInstanceId })
@@ -268,7 +292,12 @@ function createApp(db, save, clubDb, saveClub) {
       for (const m of movIds) {
         qShop('ammo_movements', m.id, 'DELETE', null)
       }
+      const lotIds = allRows(db, `SELECT id FROM ammo_lot_openings WHERE ammo_type_id = ?`, [id])
+      for (const l of lotIds) {
+        qShop('ammo_lot_openings', l.id, 'DELETE', null)
+      }
       qShop('ammo_types', id, 'DELETE', null)
+      runDb(db, `DELETE FROM ammo_lot_openings WHERE ammo_type_id = ?`, [id])
       runDb(db, `DELETE FROM ammo_movements WHERE ammo_type_id = ?`, [id])
       runDb(db, `DELETE FROM ammo_types WHERE id = ?`, [id])
       save()
@@ -317,7 +346,7 @@ function createApp(db, save, clubDb, saveClub) {
       for (;;) {
         const chunk = allRows(
           db,
-          `SELECT ammo_type_id, quantity, type, date FROM ammo_movements
+          `SELECT ammo_type_id, quantity, type, date, lot_number FROM ammo_movements
            ORDER BY date ASC LIMIT ? OFFSET ?`,
           [page, offset],
         )
@@ -341,7 +370,7 @@ function createApp(db, save, clubDb, saveClub) {
       const movements = allRows(
         db,
         `SELECT m.id, m.ammo_type_id, m.quantity, m.type, m.date, m.saida_group_id,
-                m.nf_number,
+                m.nf_number, m.lot_number,
                 at.name AS at_name, c.name AS cal_name,
                 COALESCE(c.product_type, 'municao') AS product_type
          FROM ammo_movements m
@@ -359,6 +388,7 @@ function createApp(db, save, clubDb, saveClub) {
         ammo_type_id: m.ammo_type_id,
         saida_group_id: m.saida_group_id ?? null,
         nf_number: m.nf_number ?? null,
+        lot_number: m.lot_number ?? null,
         productName: m.at_name ?? '—',
         caliber: m.cal_name ?? '—',
         product_type: m.product_type ?? 'municao',
@@ -387,7 +417,7 @@ function createApp(db, save, clubDb, saveClub) {
           : ''
 
       let sql = `SELECT m.id, m.ammo_type_id, m.quantity, m.type, m.date, m.saida_group_id,
-                m.nf_number,
+                m.nf_number, m.lot_number,
                 at.name AS at_name, c.name AS cal_name,
                 COALESCE(c.product_type, 'municao') AS product_type
          FROM ammo_movements m
@@ -412,6 +442,13 @@ function createApp(db, save, clubDb, saveClub) {
         sql += ` AND m.nf_number LIKE ? COLLATE NOCASE`
         params.push(`%${nfNumber}%`)
       }
+      const lotRaw = req.query.lotNumber
+      const lotSearch =
+        lotRaw != null && String(lotRaw).trim() !== '' ? String(lotRaw).trim() : ''
+      if (lotSearch) {
+        sql += ` AND m.lot_number LIKE ? COLLATE NOCASE`
+        params.push(`%${lotSearch}%`)
+      }
       sql += ` ORDER BY m.date DESC`
 
       const movements = allRows(db, sql, params)
@@ -423,6 +460,7 @@ function createApp(db, save, clubDb, saveClub) {
         ammo_type_id: m.ammo_type_id,
         saida_group_id: m.saida_group_id ?? null,
         nf_number: m.nf_number ?? null,
+        lot_number: m.lot_number ?? null,
         productName: m.at_name ?? '—',
         caliber: m.cal_name ?? '—',
         product_type: m.product_type ?? 'municao',
@@ -436,8 +474,15 @@ function createApp(db, save, clubDb, saveClub) {
   app.post('/api/ammo-movements', (req, res) => {
     try {
       const body = req.body || {}
-      const { ammo_type_id, quantity, type, date, saida_group_id, nf_number } =
-        body
+      const {
+        ammo_type_id,
+        quantity,
+        type,
+        date,
+        saida_group_id,
+        nf_number,
+        lot_number,
+      } = body
       if (!ammo_type_id || !type || quantity == null || !date) {
         return jsonError(
           res,
@@ -454,11 +499,21 @@ function createApp(db, save, clubDb, saveClub) {
       }
       const ammoExists = allRows(
         db,
-        `SELECT id FROM ammo_types WHERE id = ?`,
+        `SELECT at.id, COALESCE(c.product_type, 'municao') AS product_type
+         FROM ammo_types at JOIN calibers c ON c.id = at.caliber_id
+         WHERE at.id = ?`,
         [ammo_type_id],
       )
       if (!ammoExists.length) {
         return jsonError(res, 404, 'Produto não encontrado.')
+      }
+      const lot = normalizeLotNumber(lot_number)
+      if (
+        type === 'entrada' &&
+        !lot &&
+        LOT_REQUIRED_PRODUCT_TYPES.has(ammoExists[0].product_type)
+      ) {
+        return jsonError(res, 400, 'Informe o número do lote da entrada.')
       }
       if (type === 'saida') {
         const available = ammoStockForType(db, ammo_type_id)
@@ -469,6 +524,12 @@ function createApp(db, save, clubDb, saveClub) {
             `Saldo insuficiente. Em estoque: ${available}.`,
           )
         }
+        const lotErr = checkLotDeltas(
+          db,
+          ammo_type_id,
+          new Map([[lotKey(lot), -qty]]),
+        )
+        if (lotErr) return jsonError(res, 400, lotErr)
       }
       const nfTrim =
         nf_number != null && String(nf_number).trim() !== ''
@@ -477,8 +538,8 @@ function createApp(db, save, clubDb, saveClub) {
       const nfStored = type === 'entrada' ? nfTrim : null
       runDb(
         db,
-        `INSERT INTO ammo_movements (ammo_type_id, quantity, type, date, saida_group_id, nf_number)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ammo_movements (ammo_type_id, quantity, type, date, saida_group_id, nf_number, lot_number)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           ammo_type_id,
           qty,
@@ -486,25 +547,18 @@ function createApp(db, save, clubDb, saveClub) {
           date,
           saida_group_id != null ? saida_group_id : null,
           nfStored,
+          lot,
         ],
       )
       save()
       const rid = allRows(db, `SELECT last_insert_rowid() AS id`)[0]?.id
       const inserted = allRows(
         db,
-        `SELECT id, ammo_type_id, quantity, type, date, saida_group_id, nf_number FROM ammo_movements WHERE id = ?`,
+        `SELECT id, ammo_type_id, quantity, type, date, saida_group_id, nf_number, lot_number FROM ammo_movements WHERE id = ?`,
         [rid],
       )[0]
       if (inserted) {
-        qShop('ammo_movements', inserted.id, 'INSERT', {
-          local_id: inserted.id,
-          ammo_type_id: inserted.ammo_type_id,
-          quantity: inserted.quantity,
-          type: inserted.type,
-          date: inserted.date,
-          saida_group_id: inserted.saida_group_id ?? null,
-          nf_number: inserted.nf_number ?? null,
-        })
+        qShop('ammo_movements', inserted.id, 'INSERT', movementSyncPayload(inserted))
       }
       res.status(201).json({ ok: true })
       safeSyncAfterStockChange(db, save)
@@ -526,7 +580,7 @@ function createApp(db, save, clubDb, saveClub) {
       }
       const row = allRows(
         db,
-        `SELECT id, type, ammo_type_id, quantity FROM ammo_movements WHERE id = ?`,
+        `SELECT id, type, ammo_type_id, quantity, lot_number FROM ammo_movements WHERE id = ?`,
         [movementId],
       )[0]
       if (!row) return jsonError(res, 404, 'Movimentação não encontrada.')
@@ -541,6 +595,14 @@ function createApp(db, save, clubDb, saveClub) {
           400,
           'Saldo não permite excluir esta entrada.',
         )
+      }
+      const lotErr = checkLotDeltas(
+        db,
+        row.ammo_type_id,
+        new Map([[lotKey(normalizeLotNumber(row.lot_number)), -Number(row.quantity)]]),
+      )
+      if (lotErr) {
+        return jsonError(res, 400, `Não dá para excluir esta entrada. ${lotErr}`)
       }
 
       runDb(db, `DELETE FROM ammo_movements WHERE id = ?`, [movementId])
@@ -612,21 +674,22 @@ function createApp(db, save, clubDb, saveClub) {
         return jsonError(res, 400, 'Id de movimentação inválido.')
       }
       const body = req.body || {}
-      const { quantity, date, nf_number } = body
+      const { quantity, date, nf_number, lot_number } = body
       if (
         quantity === undefined &&
         date === undefined &&
-        nf_number === undefined
+        nf_number === undefined &&
+        lot_number === undefined
       ) {
         return jsonError(
           res,
           400,
-          'Informe quantidade, data e/ou número da NF para alterar.',
+          'Informe quantidade, data, número da NF e/ou lote para alterar.',
         )
       }
       const rows = allRows(
         db,
-        `SELECT id, ammo_type_id, quantity, type, date, nf_number FROM ammo_movements WHERE id = ?`,
+        `SELECT id, ammo_type_id, quantity, type, date, nf_number, lot_number FROM ammo_movements WHERE id = ?`,
         [movementId],
       )
       const row = rows[0]
@@ -688,27 +751,43 @@ function createApp(db, save, clubDb, saveClub) {
             : null
       }
 
+      const oldLot = normalizeLotNumber(row.lot_number)
+      const newLot =
+        lot_number !== undefined ? normalizeLotNumber(lot_number) : oldLot
+      if (newLot !== oldLot || newQty !== row.quantity) {
+        if (row.type === 'entrada' && !newLot && newLot !== oldLot) {
+          const pt = allRows(
+            db,
+            `SELECT COALESCE(c.product_type, 'municao') AS product_type
+             FROM ammo_types at JOIN calibers c ON c.id = at.caliber_id WHERE at.id = ?`,
+            [row.ammo_type_id],
+          )[0]?.product_type
+          if (LOT_REQUIRED_PRODUCT_TYPES.has(pt)) {
+            return jsonError(res, 400, 'Informe o número do lote da entrada.')
+          }
+        }
+        /** @type {Map<string, number>} */
+        const deltas = new Map()
+        const addDelta = (k, d) => deltas.set(k, (deltas.get(k) ?? 0) + d)
+        addDelta(lotKey(oldLot), -movementEffect(row.type, row.quantity))
+        addDelta(lotKey(newLot), movementEffect(row.type, newQty))
+        const lotErr = checkLotDeltas(db, row.ammo_type_id, deltas)
+        if (lotErr) return jsonError(res, 400, lotErr)
+      }
+
       runDb(
         db,
-        `UPDATE ammo_movements SET quantity = ?, date = ?, nf_number = ? WHERE id = ?`,
-        [newQty, newDate, newNf, movementId],
+        `UPDATE ammo_movements SET quantity = ?, date = ?, nf_number = ?, lot_number = ? WHERE id = ?`,
+        [newQty, newDate, newNf, newLot, movementId],
       )
       save()
       const upd = allRows(
         db,
-        `SELECT id, ammo_type_id, quantity, type, date, saida_group_id, nf_number FROM ammo_movements WHERE id = ?`,
+        `SELECT id, ammo_type_id, quantity, type, date, saida_group_id, nf_number, lot_number FROM ammo_movements WHERE id = ?`,
         [movementId],
       )[0]
       if (upd) {
-        qShop('ammo_movements', movementId, 'UPDATE', {
-          local_id: upd.id,
-          ammo_type_id: upd.ammo_type_id,
-          quantity: upd.quantity,
-          type: upd.type,
-          date: upd.date,
-          saida_group_id: upd.saida_group_id ?? null,
-          nf_number: upd.nf_number ?? null,
-        })
+        qShop('ammo_movements', movementId, 'UPDATE', movementSyncPayload(upd))
       }
       res.json({ ok: true })
       safeSyncAfterStockChange(db, save)

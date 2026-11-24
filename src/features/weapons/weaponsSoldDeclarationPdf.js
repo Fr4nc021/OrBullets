@@ -1,10 +1,30 @@
 import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { docProcessLabels, formatDateBrShort, formatMoneyBr } from './weaponVendaHelpers.js'
 
 const STORE_DECLARATION =
   'A loja Pesca Sem Limites Comércio de Produtos Náuticos Ltda, CNPJ 21.921.795/0001-40, declara que vendeu para esses clientes as seguintes armas:'
 
-const MARGIN = 16
+const MARGIN = 10
+
+const CLIENT_HEAD = [['Nome', 'RG', 'CPF', 'Telefone', 'Endereço']]
+
+const WEAPON_HEAD = [[
+  'Cliente',
+  'Tipo',
+  'Marca',
+  'Modelo',
+  'Calibre',
+  'Nº série',
+  'Data',
+  'Pagamento',
+  'Valor arma',
+  'Valor docs',
+  'Total',
+  'Documentos',
+  'Vendedor',
+  'Obs.',
+]]
 
 function dash(value) {
   const t = value == null ? '' : String(value).trim()
@@ -21,120 +41,156 @@ function filenameDateStamp(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-/**
- * @param {import('jspdf').jsPDF} doc
- * @param {number} y
- * @param {number} need
- */
-function ensureSpace(doc, y, need) {
-  const pageH = doc.internal.pageSize.getHeight()
-  if (y + need > pageH - 14) {
-    doc.addPage()
-    return 16
+function clientAddress(row) {
+  return [
+    dash(row.clientAddress),
+    `nº ${dash(row.clientNumber)}`,
+    dash(row.clientNeighborhood),
+    dash(row.clientCity),
+    `CEP ${dash(row.clientCep)}`,
+  ].join(', ')
+}
+
+function uniqueClients(rows) {
+  const seen = new Set()
+  const clients = []
+  for (const row of rows) {
+    const key = `${dash(row.clientCpf)}|${dash(row.clientName)}`.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    clients.push(row)
   }
-  return y
+  return clients
+}
+
+function tableStyles() {
+  return {
+    font: 'helvetica',
+    fontSize: 7,
+    cellPadding: 1.3,
+    valign: 'middle',
+    lineColor: [100, 100, 100],
+    lineWidth: 0.1,
+    overflow: 'linebreak',
+  }
+}
+
+function headStyles() {
+  return {
+    fillColor: [238, 242, 246],
+    textColor: [20, 20, 20],
+    fontStyle: 'bold',
+    fontSize: 7,
+  }
+}
+
+function emptyRow(colCount, text) {
+  return [[{ content: text, colSpan: colCount, styles: { halign: 'left', fontStyle: 'italic' } }]]
 }
 
 /**
- * @param {import('jspdf').jsPDF} doc
- * @param {string} text
- * @param {number} y
- * @param {{ bold?: boolean, size?: number, gap?: number }} [opts]
- */
-function writeWrapped(doc, text, y, opts = {}) {
-  const size = opts.size ?? 11
-  const gap = opts.gap ?? 5.2
-  const innerW = doc.internal.pageSize.getWidth() - 2 * MARGIN
-  doc.setFont('helvetica', opts.bold ? 'bold' : 'normal')
-  doc.setFontSize(size)
-  const lines = doc.splitTextToSize(String(text ?? ''), innerW)
-  const lineH = size * 0.45
-  y = ensureSpace(doc, y, lines.length * lineH + 2)
-  doc.text(lines, MARGIN, y)
-  return y + lines.length * lineH + (gap - lineH)
-}
-
-/**
- * PDF simples: declaração da loja, dados dos clientes e dados das armas selecionadas.
+ * PDF da declaração: texto da loja e, em tabelas, clientes e armas selecionadas.
  * @param {Array<object>} sales
  */
 export function buildSoldWeaponsDeclarationPdfDoc(sales) {
   const rows = Array.isArray(sales) ? sales : []
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
-  let y = 18
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const innerW = pageW - 2 * MARGIN
+  let y = 12
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(14)
   doc.text('Declaração de armas vendidas', MARGIN, y)
-  y += 8
-
-  y = writeWrapped(doc, STORE_DECLARATION, y, { size: 11, gap: 7 })
+  y += 6
 
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  y = ensureSpace(doc, y, 8)
+  doc.setFontSize(10)
+  const declLines = doc.splitTextToSize(STORE_DECLARATION, innerW)
+  doc.text(declLines, MARGIN, y)
+  y += declLines.length * 4.4 + 2
+
+  doc.setFontSize(8.5)
   doc.text(
     `Gerado em ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · ${rows.length} arma(s)`,
     MARGIN,
     y,
   )
-  y += 8
+  y += 6
 
-  y = writeWrapped(doc, 'Clientes', y, { bold: true, size: 12, gap: 6 })
-
-  if (rows.length === 0) {
-    y = writeWrapped(doc, 'Nenhuma venda selecionada.', y, { size: 11 })
-  }
-
-  const seenClients = new Set()
-  let clientIndex = 0
-  for (const row of rows) {
-    const key = `${dash(row.clientCpf)}|${dash(row.clientName)}`.toLowerCase()
-    if (seenClients.has(key)) continue
-    seenClients.add(key)
-    clientIndex += 1
-    const address = [
-      dash(row.clientAddress),
-      `nº ${dash(row.clientNumber)}`,
-      dash(row.clientNeighborhood),
-      dash(row.clientCity),
-      `CEP ${dash(row.clientCep)}`,
-    ].join(', ')
-    const block = [
-      `${clientIndex}. ${dash(row.clientName)}`,
-      `RG: ${dash(row.clientIdentity)}`,
-      `CPF: ${dash(row.clientCpf)}`,
-      `Telefone: ${dash(row.clientPhone)}`,
-      `Endereço: ${address}`,
-    ].join('\n')
-    y = writeWrapped(doc, block, y, { size: 10.5, gap: 6 })
-  }
-
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.text('Clientes', MARGIN, y)
   y += 2
-  y = writeWrapped(doc, 'Armas', y, { bold: true, size: 12, gap: 6 })
 
-  rows.forEach((row, index) => {
-    const processes = docProcessLabels(row.docProcesses ?? [])
-    const saleDate = row.saleDate ? formatDateBrShort(row.saleDate) : '—'
-    const block = [
-      `${index + 1}. ${dash(row.model)} — cliente: ${dash(row.clientName)}`,
-      `Tipo: ${dash(row.type)}`,
-      `Marca: ${dash(row.brand)}`,
-      `Modelo: ${dash(row.model)}`,
-      `Calibre: ${dash(row.caliber)}`,
-      `Nº de série: ${dash(row.serial)}`,
-      `Data da venda: ${saleDate}`,
-      `Forma de pagamento: ${dash(row.paymentMethod)}`,
-      `Valor da arma: ${moneyOrDash(row.weaponValue)}`,
-      `Valor dos documentos: ${moneyOrDash(row.docsValue)}`,
-      `Total: ${moneyOrDash(row.total)}`,
-      `Documentos: ${processes.length ? processes.join(', ') : '—'}`,
-      `Vendedor: ${dash(row.seller)}`,
-      row.obs ? `Observação: ${row.obs}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n')
-    y = writeWrapped(doc, block, y, { size: 10.5, gap: 6 })
+  const clients = uniqueClients(rows)
+  const clientPct = [0.24, 0.12, 0.14, 0.14, 0.36]
+  autoTable(doc, {
+    startY: y,
+    head: CLIENT_HEAD,
+    body: clients.length
+      ? clients.map((row) => [
+        dash(row.clientName),
+        dash(row.clientIdentity),
+        dash(row.clientCpf),
+        dash(row.clientPhone),
+        clientAddress(row),
+      ])
+      : emptyRow(5, 'Nenhuma venda selecionada.'),
+    theme: 'grid',
+    styles: { ...tableStyles(), fontSize: 8 },
+    headStyles: { ...headStyles(), fontSize: 8 },
+    columnStyles: Object.fromEntries(
+      clientPct.map((p, i) => [i, { cellWidth: innerW * p, halign: 'left' }]),
+    ),
+    margin: { left: MARGIN, right: MARGIN },
+    tableWidth: innerW,
+  })
+
+  y = doc.lastAutoTable.finalY + 8
+  if (y > doc.internal.pageSize.getHeight() - 28) {
+    doc.addPage()
+    y = 14
+  }
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.text('Armas', MARGIN, y)
+  y += 2
+
+  const weaponPct = [0.1, 0.07, 0.08, 0.09, 0.06, 0.08, 0.06, 0.07, 0.07, 0.07, 0.06, 0.08, 0.06, 0.05]
+  autoTable(doc, {
+    startY: y,
+    head: WEAPON_HEAD,
+    body: rows.length
+      ? rows.map((row) => {
+        const processes = docProcessLabels(row.docProcesses ?? [])
+        return [
+          dash(row.clientName),
+          dash(row.type),
+          dash(row.brand),
+          dash(row.model),
+          dash(row.caliber),
+          dash(row.serial),
+          row.saleDate ? formatDateBrShort(row.saleDate) : '—',
+          dash(row.paymentMethod),
+          moneyOrDash(row.weaponValue),
+          moneyOrDash(row.docsValue),
+          moneyOrDash(row.total),
+          processes.length ? processes.join(', ') : '—',
+          dash(row.seller),
+          dash(row.obs),
+        ]
+      })
+      : emptyRow(14, 'Nenhuma venda selecionada.'),
+    theme: 'grid',
+    styles: tableStyles(),
+    headStyles: headStyles(),
+    columnStyles: Object.fromEntries(
+      weaponPct.map((p, i) => [i, { cellWidth: innerW * p, halign: 'left' }]),
+    ),
+    margin: { left: MARGIN, right: MARGIN },
+    tableWidth: innerW,
   })
 
   return doc

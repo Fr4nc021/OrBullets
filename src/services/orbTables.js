@@ -4,6 +4,8 @@ export const ORB_TABLES = {
   ammo_types: 'orbullets_ammo_types',
   ammo_movements: 'orbullets_ammo_movements',
   ammo_stock: 'orbullets_ammo_stock',
+  ammo_lot_openings: 'orbullets_ammo_lot_openings',
+  ammo_lot_stock: 'orbullets_ammo_lot_stock',
   weapon_types: 'orbullets_weapon_types',
   weapon_brands: 'orbullets_weapon_brands',
   weapons: 'orbullets_weapons',

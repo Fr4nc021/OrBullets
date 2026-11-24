@@ -104,6 +104,8 @@ export async function repoSearchAmmoMovementsWithDetails(filters = {}) {
   if (filters.dateToIso) params.set('dateTo', filters.dateToIso)
   const nfNumber = filters.nfNumber?.trim()
   if (nfNumber) params.set('nfNumber', nfNumber)
+  const lotNumber = filters.lotNumber?.trim()
+  if (lotNumber) params.set('lotNumber', lotNumber)
   const q = params.toString()
   return (await apiFetch(`/api/ammo-movements/search${q ? `?${q}` : ''}`)) ?? []
 }
@@ -144,5 +146,34 @@ export async function repoUpdateAmmoMovement(movementId, patch) {
   await apiFetch(`/api/ammo-movements/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(patch ?? {}),
+  })
+}
+
+/** Saldo por lote de todos os produtos: [{ ammo_type_id, lot_number (null = sem lote), stock }]. */
+export async function repoFetchAmmoLots() {
+  return (await apiFetch('/api/ammo-lots')) ?? []
+}
+
+/** @param {string} ammoTypeId */
+export async function repoFetchLotOpenings(ammoTypeId) {
+  const q = ammoTypeId ? `?ammo_type_id=${encodeURIComponent(ammoTypeId)}` : ''
+  return (await apiFetch(`/api/ammo-lot-openings${q}`)) ?? []
+}
+
+/**
+ * @param {string} ammoTypeId
+ * @param {{ lot_number: string, quantity: number }[]} lots
+ */
+export async function repoCreateLotOpenings(ammoTypeId, lots) {
+  return apiFetch('/api/ammo-lot-openings', {
+    method: 'POST',
+    body: JSON.stringify({ ammo_type_id: ammoTypeId, lots }),
+  })
+}
+
+/** @param {string} openingId */
+export async function repoDeleteLotOpening(openingId) {
+  return apiFetch(`/api/ammo-lot-openings/${encodeURIComponent(openingId)}`, {
+    method: 'DELETE',
   })
 }
