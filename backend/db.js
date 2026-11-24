@@ -49,6 +49,10 @@ async function openDatabase(dbPath) {
   ensureColumn(db, 'ammo_movements', 'saida_group_id', 'TEXT')
   ensureColumn(db, 'calibers', 'product_type', "TEXT DEFAULT 'municao'")
   ensureColumn(db, 'ammo_types', 'created_at', 'TEXT')
+  ensureColumn(db, 'ammo_movements', 'lot_number', 'TEXT')
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS ammo_movements_type_lot_idx ON ammo_movements (ammo_type_id, lot_number)',
+  )
 
   function save() {
     const data = db.export()

@@ -7,6 +7,7 @@ const SHOP_UPSERT_ORDER = [
   'weapon_types',
   'weapon_brands',
   'ammo_types',
+  'ammo_lot_openings',
   'weapons',
   'ammo_movements',
 ]

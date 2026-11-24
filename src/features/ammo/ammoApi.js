@@ -25,4 +25,8 @@ export {
   deleteEntradaMovement,
   deleteSaidaMovement,
   updateAmmoMovement,
+  fetchAmmoLots,
+  fetchLotOpenings,
+  createLotOpenings,
+  deleteLotOpening,
 } from '../../services/estoqueService.js'

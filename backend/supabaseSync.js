@@ -180,6 +180,7 @@ async function applyUpsert(sb, scope, table, payload) {
         date: payload.date,
         saida_group_id: payload.saida_group_id ?? null,
         nf_number: payload.nf_number ?? null,
+        lot_number: payload.lot_number ?? null,
       })
       return
     }
@@ -262,7 +263,8 @@ function sameShopMovement(remote, payload) {
     remote.type === payload.type &&
     normTime(remote.date) === normTime(payload.date) &&
     normText(remote.saida_group_id) === normText(payload.saida_group_id) &&
-    normText(remote.nf_number) === normText(payload.nf_number)
+    normText(remote.nf_number) === normText(payload.nf_number) &&
+    normText(remote.lot_number) === normText(payload.lot_number)
   )
 }
 
@@ -487,6 +489,18 @@ async function reconcileShopSnapshot(sb, db) {
     if (error) throw error
   }
 
+  const lotOpenings = allRowsLocal(
+    db,
+    'SELECT id, ammo_type_id, lot_number, quantity, created_at FROM ammo_lot_openings',
+  )
+  for (const part of chunk(lotOpenings, BATCH_UPSERT)) {
+    if (!part.length) continue
+    const { error } = await sb
+      .from(remoteTable('ammo_lot_openings'))
+      .upsert(part, { onConflict: 'id' })
+    if (error) throw error
+  }
+
   const weapons = allRowsLocal(db, 'SELECT * FROM weapons')
   for (const part of chunk(weapons, BATCH_UPSERT)) {
     if (!part.length) continue
@@ -496,7 +510,7 @@ async function reconcileShopSnapshot(sb, db) {
 
   const movements = allRowsLocal(
     db,
-    `SELECT id, ammo_type_id, quantity, type, date, saida_group_id, nf_number FROM ammo_movements ORDER BY id`,
+    `SELECT id, ammo_type_id, quantity, type, date, saida_group_id, nf_number, lot_number FROM ammo_movements ORDER BY id`,
   )
   await mirrorMovementsFromLocal(
     sb,
@@ -509,8 +523,9 @@ async function reconcileShopSnapshot(sb, db) {
       date: row.date,
       saida_group_id: row.saida_group_id ?? null,
       nf_number: row.nf_number ?? null,
+      lot_number: row.lot_number ?? null,
     })),
-    'id, local_id, ammo_type_id, quantity, type, date, saida_group_id, nf_number',
+    'id, local_id, ammo_type_id, quantity, type, date, saida_group_id, nf_number, lot_number',
     sameShopMovement,
   )
 
@@ -518,6 +533,11 @@ async function reconcileShopSnapshot(sb, db) {
     sb,
     'weapons',
     new Set(allRowsLocal(db, 'SELECT id FROM weapons').map((r) => String(r.id))),
+  )
+  await purgeRemoteRowsNotInLocal(
+    sb,
+    'ammo_lot_openings',
+    new Set(lotOpenings.map((r) => String(r.id))),
   )
   await purgeRemoteRowsNotInLocal(
     sb,
@@ -707,16 +727,16 @@ async function pushOnce(shopDb, shopSave, clubDb, clubSave) {
   outProc += r1.processed
   outErr += r1.errors
 
-  if (clubDb && clubSave) {
-    const r2 = await processOutboxScope(sb, clubDb, clubSave, 'club')
-    outProc += r2.processed
-    outErr += r2.errors
+  // Estoque do clube é gravado direto no Supabase pelo ApexControl.
+  // Espelhar o SQLite local apagava item, receita e saldo que só existiam na nuvem.
+  if (clubDb) {
+    syncLogger.log(
+      'info',
+      'sync do clube ignorado — saldo do clube fica no Supabase',
+    )
   }
 
   await reconcileShopSnapshot(sb, shopDb)
-  if (clubDb) {
-    await reconcileClubSnapshot(sb, clubDb)
-  }
 
   syncOutbox.pruneSynced(shopDb, shopSave, 2500)
   if (clubDb && clubSave) {

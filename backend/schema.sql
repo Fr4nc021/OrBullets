@@ -24,8 +24,21 @@ CREATE TABLE IF NOT EXISTS ammo_movements (
   type TEXT NOT NULL CHECK (type IN ('entrada', 'saida')),
   date TEXT NOT NULL,
   saida_group_id TEXT,
-  nf_number TEXT
+  nf_number TEXT,
+  lot_number TEXT
 );
+
+-- Saldo inicial por lote: distribui o estoque que já existia (sem lote) em lotes.
+CREATE TABLE IF NOT EXISTS ammo_lot_openings (
+  id TEXT PRIMARY KEY NOT NULL,
+  ammo_type_id TEXT NOT NULL REFERENCES ammo_types (id),
+  lot_number TEXT NOT NULL,
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS ammo_lot_openings_type_idx
+  ON ammo_lot_openings (ammo_type_id);
 
 CREATE TABLE IF NOT EXISTS weapon_types (
   id TEXT PRIMARY KEY NOT NULL,

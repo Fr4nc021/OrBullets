@@ -76,6 +76,8 @@ export default function MovementsPage() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [filterCaliber, setFilterCaliber] = useState('')
   const [filterNfNumber, setFilterNfNumber] = useState('')
+  const [filterLot, setFilterLot] = useState('')
+  const [filterLotDebounced, setFilterLotDebounced] = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
   const [filterCaliberDebounced, setFilterCaliberDebounced] = useState('')
@@ -117,6 +119,13 @@ export default function MovementsPage() {
     return () => clearTimeout(t)
   }, [filterNfNumber])
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setFilterLotDebounced(filterLot.trim())
+    }, 350)
+    return () => clearTimeout(t)
+  }, [filterLot])
+
   const filterStartMs = filterDateFrom
     ? parseLocalDateStart(filterDateFrom)
     : NaN
@@ -145,6 +154,7 @@ export default function MovementsPage() {
   const hasActiveFilters =
     filterCaliberDebounced !== '' ||
     filterNfDebounced !== '' ||
+    filterLotDebounced !== '' ||
     filterDateFrom !== '' ||
     filterDateTo !== ''
 
@@ -164,6 +174,7 @@ export default function MovementsPage() {
             dateFrom: filterDateFrom || undefined,
             dateTo: filterDateTo || undefined,
             nfNumber: filterNfDebounced || undefined,
+            lotNumber: filterLotDebounced || undefined,
           })
         : await fetchRecentAmmoMovements(200)
       setRows(data)
@@ -175,6 +186,7 @@ export default function MovementsPage() {
   }, [
     filterCaliberDebounced,
     filterNfDebounced,
+    filterLotDebounced,
     filterDateFrom,
     filterDateTo,
     filterDateError,
@@ -189,6 +201,8 @@ export default function MovementsPage() {
     setFilterCaliber('')
     setFilterCaliberDebounced('')
     setFilterNfNumber('')
+    setFilterLot('')
+    setFilterLotDebounced('')
     setFilterNfDebounced('')
     setFilterDateFrom('')
     setFilterDateTo('')
@@ -201,6 +215,7 @@ export default function MovementsPage() {
       quantity: r.quantity,
       caliber: r.caliber,
       product: r.productName,
+      lot: r.lot_number ?? null,
     }))
     const atMs = Math.min(...group.map((r) => new Date(r.date).getTime()))
     const atDate = new Date(atMs)
@@ -221,6 +236,7 @@ export default function MovementsPage() {
       qtyStr: String(row.quantity),
       dateLocal: isoToDatetimeLocal(row.date),
       nfStr: row.nf_number != null ? String(row.nf_number) : '',
+      lotStr: row.lot_number != null ? String(row.lot_number) : '',
     })
   }
 
@@ -242,6 +258,10 @@ export default function MovementsPage() {
       return
     }
     const patch = { quantity: qty, date: iso }
+    const lot = String(editDraft.lotStr ?? '').trim()
+    if (lot.toUpperCase() !== String(editDraft.row.lot_number ?? '').toUpperCase()) {
+      patch.lot_number = lot || null
+    }
     if (editDraft.row.type === 'entrada') {
       const nf = String(editDraft.nfStr ?? '').trim()
       if (!nf) {
@@ -389,6 +409,23 @@ export default function MovementsPage() {
                   required
                 />
               </div>
+              <div className="stock-dialog__field">
+                <label htmlFor="movements-edit-lot">Número do lote</label>
+                <input
+                  id="movements-edit-lot"
+                  type="text"
+                  value={editDraft.lotStr}
+                  onChange={(ev) =>
+                    setEditDraft((d) =>
+                      d ? { ...d, lotStr: ev.target.value } : d,
+                    )
+                  }
+                  disabled={savingEdit}
+                  autoComplete="off"
+                  maxLength={60}
+                  placeholder="Vazio = sem lote"
+                />
+              </div>
               {editDraft.row.type === 'entrada' ? (
                 <div className="stock-dialog__field">
                   <label htmlFor="movements-edit-nf">Número da NF</label>
@@ -472,6 +509,18 @@ export default function MovementsPage() {
               enterKeyHint="search"
             />
           </label>
+          <label className="stock-page__filter-field stock-page__filter-field--grow">
+            <span className="stock-page__filter-label">Lote</span>
+            <input
+              type="search"
+              value={filterLot}
+              onChange={(ev) => setFilterLot(ev.target.value)}
+              placeholder="Ex.: AB1234"
+              autoComplete="off"
+              disabled={loading && rows.length === 0}
+              enterKeyHint="search"
+            />
+          </label>
           <label className="stock-page__filter-field">
             <span className="stock-page__filter-label">Data inicial</span>
             <input
@@ -546,6 +595,7 @@ export default function MovementsPage() {
                   <th>Tipo de produto</th>
                   <th>Calibre</th>
                   <th>Produto</th>
+                  <th>Lote</th>
                   <th className="movements-table__qty-head">Quantidade</th>
                   <th className="movements-table__actions-head">Ações</th>
                 </tr>
@@ -581,6 +631,7 @@ export default function MovementsPage() {
                     <td>{productTypeLabel(row.product_type)}</td>
                     <td>{row.caliber}</td>
                     <td>{row.productName}</td>
+                    <td>{row.lot_number ?? '—'}</td>
                     <td className="movements-table__qty">{row.quantity}</td>
                     <td className="movements-table__actions">
                       {row.type === 'saida' ? (

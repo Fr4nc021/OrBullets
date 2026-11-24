@@ -567,3 +567,35 @@ async function repoUpdateAmmoMovementCore(id, row, qIn, dateIn, nfIn) {
     .eq('id', id)
   if (updErr) throw new Error(formatSupabaseError(updErr))
 }
+
+/** Saldo por lote lido da nuvem (view orbullets_ammo_lot_stock). */
+export async function repoFetchAmmoLots() {
+  const { data, error } = await supabase()
+    .from(T.ammo_lot_stock)
+    .select('ammo_type_id, lot_number, stock')
+  if (error) throw new Error(formatSupabaseError(error))
+  return (data ?? []).filter((r) => r.lot_number != null || Number(r.stock) !== 0)
+}
+
+/** @param {string} ammoTypeId */
+export async function repoFetchLotOpenings(ammoTypeId) {
+  let q = supabase()
+    .from(T.ammo_lot_openings)
+    .select('id, ammo_type_id, lot_number, quantity, created_at')
+    .order('created_at', { ascending: true })
+  if (ammoTypeId) q = q.eq('ammo_type_id', ammoTypeId)
+  const { data, error } = await q
+  if (error) throw new Error(formatSupabaseError(error))
+  return data ?? []
+}
+
+const LOTS_DESKTOP_ONLY =
+  'A distribuição em lotes é feita no app do PC (o estoque da loja fica no PC servidor).'
+
+export async function repoCreateLotOpenings() {
+  throw new Error(LOTS_DESKTOP_ONLY)
+}
+
+export async function repoDeleteLotOpening() {
+  throw new Error(LOTS_DESKTOP_ONLY)
+}

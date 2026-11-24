@@ -34,12 +34,15 @@ export async function searchAmmoMovements(filters = {}) {
   const dateTo = filters.dateTo != null ? String(filters.dateTo).trim() : ''
   const nfNumber =
     filters.nfNumber != null ? String(filters.nfNumber).trim() : ''
+  const lotNumber =
+    filters.lotNumber != null ? String(filters.lotNumber).trim() : ''
 
   return ammoRepo().repoSearchAmmoMovementsWithDetails({
     caliber: caliber || undefined,
     dateFromIso: dateFrom ? localDateStartIso(dateFrom) : undefined,
     dateToIso: dateTo ? localDateEndIso(dateTo) : undefined,
     nfNumber: nfNumber || undefined,
+    lotNumber: lotNumber || undefined,
   })
 }
 
@@ -47,7 +50,7 @@ export async function searchAmmoMovements(filters = {}) {
  * @param {string} ammoTypeId
  * @param {'entrada'|'saida'} type
  * @param {number} quantity
- * @param {{ saidaGroupId?: string, nfNumber?: string }} [opts] — `saidaGroupId` vincula linhas da mesma saída (termo); `nfNumber` nas entradas.
+ * @param {{ saidaGroupId?: string, nfNumber?: string, lotNumber?: string | null }} [opts] — `saidaGroupId` vincula linhas da mesma saída (termo); `nfNumber` nas entradas; `lotNumber` = lote (vazio = sem lote).
  */
 export async function createAmmoMovement(ammoTypeId, type, quantity, opts) {
   if (!ammoTypeId) throw new Error('Tipo de munição inválido.')
@@ -74,6 +77,9 @@ export async function createAmmoMovement(ammoTypeId, type, quantity, opts) {
     if (nf) payload.nf_number = nf
   }
 
+  const lot = opts?.lotNumber != null ? String(opts.lotNumber).trim() : ''
+  if (lot) payload.lot_number = lot
+
   await ammoRepo().repoInsertAmmoMovement(payload)
 }
 
@@ -96,10 +102,34 @@ export async function deleteSaidaMovement(movementId) {
 /**
  * Atualiza quantidade, data e/ou número da NF de uma movimentação já lançada.
  * @param {number|string} movementId
- * @param {{ quantity?: number, date?: string, nf_number?: string | null }} patch
+ * @param {{ quantity?: number, date?: string, nf_number?: string | null, lot_number?: string | null }} patch
  */
 export async function updateAmmoMovement(movementId, patch) {
   await ammoRepo().repoUpdateAmmoMovement(movementId, patch)
 }
 
 export const createStockMovement = createAmmoMovement
+
+/** Saldo por lote: [{ ammo_type_id, lot_number (null = sem lote), stock }]. */
+export async function fetchAmmoLots() {
+  return ammoRepo().repoFetchAmmoLots()
+}
+
+/** Distribuições de saldo antigo em lotes de um produto. */
+export async function fetchLotOpenings(ammoTypeId) {
+  return ammoRepo().repoFetchLotOpenings(ammoTypeId)
+}
+
+/**
+ * Distribui o saldo sem lote de um produto em lotes.
+ * @param {string} ammoTypeId
+ * @param {{ lot_number: string, quantity: number }[]} lots
+ */
+export async function createLotOpenings(ammoTypeId, lots) {
+  return ammoRepo().repoCreateLotOpenings(ammoTypeId, lots)
+}
+
+/** Desfaz uma distribuição; a quantidade volta para "sem lote". */
+export async function deleteLotOpening(openingId) {
+  return ammoRepo().repoDeleteLotOpening(openingId)
+}

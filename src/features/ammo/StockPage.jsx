@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createAmmoMovement,
+  fetchAmmoLots,
   fetchAmmoMovementsForReport,
   fetchAmmoStock,
   fetchAmmoTypeOptions,
@@ -18,6 +19,16 @@ import { SaidaTermoPreviewModal } from './components/SaidaTermoPreviewModal.jsx'
 import { downloadStockReportHierarchyPdf } from './stockReportPdf.js'
 import { StockReportModal } from './components/StockReportModal.jsx'
 import { StockMovementModal } from './components/StockMovementModal.jsx'
+import { LotDistributionModal } from './components/LotDistributionModal.jsx'
+import { LotReportModal } from './components/LotReportModal.jsx'
+import {
+  NO_LOT,
+  buildLotIndex,
+  lotDisplay,
+  lotRequiredFor,
+  lotStock,
+  normalizeLotNumber,
+} from './ammoLots.js'
 import { checkLowStockAlert } from '../../services/alertsService.js'
 import { LowStockAlertDialog } from '../settings/LowStockAlertDialog.jsx'
 import './StockPage.css'
@@ -40,6 +51,12 @@ function parseQuantityInput(raw) {
 
 export default function StockPage() {
   const [rows, setRows] = useState([])
+  const [lots, setLots] = useState([])
+  const [lotsError, setLotsError] = useState('')
+  const [lotsProductId, setLotsProductId] = useState('')
+  const [lotReportOpen, setLotReportOpen] = useState(false)
+  const [lotInput, setLotInput] = useState('')
+  const [saidaLot, setSaidaLot] = useState('')
   const [calibers, setCalibers] = useState([])
   const [ammoOptions, setAmmoOptions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -144,8 +161,18 @@ export default function StockPage() {
     setLoading(true)
     setMessage({ type: '', text: '' })
     try {
-      const data = await fetchAmmoStock()
+      const [data, lotRows] = await Promise.all([
+        fetchAmmoStock(),
+        fetchAmmoLots().catch((err) => {
+          setLotsError(err.message ?? 'Erro ao carregar lotes.')
+          return null
+        }),
+      ])
       setRows(data)
+      if (lotRows) {
+        setLots(lotRows)
+        setLotsError('')
+      }
     } catch (err) {
       setMessage({
         type: 'error',
@@ -194,6 +221,54 @@ export default function StockPage() {
       setLowStockLoading(false)
     }
   }
+
+  const lotIndex = useMemo(() => buildLotIndex(lots), [lots])
+
+  const lotsProduct = useMemo(
+    () => rows.find((r) => r.ammo_type_id === lotsProductId) ?? null,
+    [rows, lotsProductId],
+  )
+
+  /** Lotes com saldo do produto escolhido na saída, descontando o que já está na lista. */
+  const saidaLotOptions = useMemo(() => {
+    if (!dialog || dialog.movementType !== 'saida' || !selectedAmmoId) return []
+    return (lotIndex.get(selectedAmmoId) ?? [])
+      .map((l) => {
+        const listed = saidaLines
+          .filter(
+            (x) =>
+              x.ammoTypeId === selectedAmmoId &&
+              (x.lotNumber ?? null) === (l.lot_number ?? null),
+          )
+          .reduce((sum, x) => sum + x.quantity, 0)
+        return {
+          value: l.lot_number ?? NO_LOT,
+          lot_number: l.lot_number,
+          available: l.stock - listed,
+        }
+      })
+      .filter((o) => o.available > 0)
+  }, [dialog, selectedAmmoId, lotIndex, saidaLines])
+
+  // Produto trocado: volta para o primeiro lote dele.
+  useEffect(() => {
+    setSaidaLot('')
+  }, [selectedAmmoId])
+
+  useEffect(() => {
+    if (!saidaLotOptions.some((o) => o.value === saidaLot)) {
+      setSaidaLot(saidaLotOptions[0]?.value ?? '')
+    }
+  }, [saidaLotOptions, saidaLot])
+
+  const entradaLotRequired = useMemo(
+    () =>
+      lotRequiredFor(
+        ammoOptions.find((o) => o.id === selectedAmmoId)?.product_type ??
+          entradaProductType,
+      ),
+    [ammoOptions, selectedAmmoId, entradaProductType],
+  )
 
   const hierarchySections = useMemo(
     () => buildProductHierarchySections(calibers, rows),
@@ -370,6 +445,8 @@ export default function StockPage() {
     setEntradaCaliber('')
     setEntradaLines([])
     setEntradaNfNumber('')
+    setLotInput('')
+    setSaidaLot('')
     setMessage({ type: '', text: '' })
     setSelectedAmmoId((prev) => {
       if (prev && ammoOptions.some((o) => o.id === prev)) return prev
@@ -390,6 +467,8 @@ export default function StockPage() {
     setEntradaCaliber('')
     setEntradaLines([])
     setEntradaNfNumber('')
+    setLotInput('')
+    setSaidaLot('')
   }
 
   function selectSaidaProductType(pt) {
@@ -486,13 +565,18 @@ export default function StockPage() {
       return
     }
     const opt = ammoOptions.find((o) => o.id === selectedAmmoId)
+    const lotNumber = normalizeLotNumber(lotInput)
+    if (!lotNumber && lotRequiredFor(opt?.product_type ?? 'municao')) {
+      setMessage({ type: 'error', text: 'Informe o número do lote.' })
+      return
+    }
     const ammoName = opt?.ammo_name ?? '—'
     const caliber = opt?.caliber ?? '—'
     const productTypeLabelLine = productTypeLabel(
       opt?.product_type ?? 'municao',
     )
     const existingIdx = entradaLines.findIndex(
-      (l) => l.ammoTypeId === selectedAmmoId,
+      (l) => l.ammoTypeId === selectedAmmoId && l.lotNumber === lotNumber,
     )
     const lancamentoAt = new Date().toISOString()
     setMessage({ type: '', text: '' })
@@ -511,12 +595,14 @@ export default function StockPage() {
           ammoName,
           caliber,
           productTypeLabel: productTypeLabelLine,
+          lotNumber,
           quantity,
           lancamentoAt,
         },
       ])
     }
     setQtyInput('')
+    setLotInput('')
   }
 
   function removeEntradaLine(lineId) {
@@ -542,17 +628,24 @@ export default function StockPage() {
       opt?.product_type ?? 'municao',
     )
     const lancamentoAt = new Date().toISOString()
-    const stockRow = rows.find((r) => r.ammo_type_id === selectedAmmoId)
-    const current = stockRow?.stock ?? 0
+    if (!saidaLot) {
+      setMessage({
+        type: 'error',
+        text: `"${fullName}" não tem saldo em nenhum lote.`,
+      })
+      return
+    }
+    const lotNumber = saidaLot === NO_LOT ? null : saidaLot
+    const current = lotStock(lotIndex, selectedAmmoId, lotNumber)
     const existingIdx = saidaLines.findIndex(
-      (l) => l.ammoTypeId === selectedAmmoId,
+      (l) => l.ammoTypeId === selectedAmmoId && (l.lotNumber ?? null) === lotNumber,
     )
     const prevQty = existingIdx >= 0 ? saidaLines[existingIdx].quantity : 0
     const totalQty = prevQty + quantity
     if (totalQty > current) {
       setMessage({
         type: 'error',
-        text: `Saldo insuficiente para "${fullName}". Em estoque: ${current}.`,
+        text: `Saldo insuficiente para "${fullName}" no ${lotNumber ? `lote ${lotNumber}` : 'saldo sem lote'}. Disponível: ${current}.`,
       })
       return
     }
@@ -573,6 +666,7 @@ export default function StockPage() {
           ammoName,
           caliber,
           productTypeLabel: productTypeLabelLine,
+          lotNumber,
           quantity,
           lancamentoAt,
         },
@@ -595,12 +689,11 @@ export default function StockPage() {
       return false
     }
     for (const line of saidaLines) {
-      const stockRow = rows.find((r) => r.ammo_type_id === line.ammoTypeId)
-      const current = stockRow?.stock ?? 0
+      const current = lotStock(lotIndex, line.ammoTypeId, line.lotNumber ?? null)
       if (line.quantity > current) {
         setMessage({
           type: 'error',
-          text: `Saldo insuficiente para "${line.fullName}". Em estoque: ${current}.`,
+          text: `Saldo insuficiente para "${line.fullName}" (${lotDisplay(line.lotNumber)}). Disponível: ${current}.`,
         })
         return false
       }
@@ -616,6 +709,7 @@ export default function StockPage() {
       quantity: l.quantity,
       caliber: l.caliber,
       product: l.fullName,
+      lot: lotDisplay(l.lotNumber),
     }))
     const { blob, filename } = getSaidaTermoPdfBlob(pdfLines)
     revokeSaidaTermoObjectUrl()
@@ -641,6 +735,7 @@ export default function StockPage() {
       for (const line of saidaLines) {
         await createAmmoMovement(line.ammoTypeId, 'saida', line.quantity, {
           saidaGroupId,
+          lotNumber: line.lotNumber ?? null,
         })
       }
       await refreshAll()
@@ -777,6 +872,7 @@ export default function StockPage() {
       for (const line of entradaLines) {
         await createAmmoMovement(line.ammoTypeId, 'entrada', line.quantity, {
           nfNumber: nf,
+          lotNumber: line.lotNumber ?? null,
         })
       }
       setMessage({ type: 'success', text: 'Entrada registrada.' })
@@ -800,6 +896,12 @@ export default function StockPage() {
           Estoque por tipo de produto, calibre e item; entradas e saídas
         </p>
       </header>
+
+      {lotsError ? (
+        <div className="stock-page__message stock-page__message--error" role="status">
+          Lotes indisponíveis: {lotsError}
+        </div>
+      ) : null}
 
       {message.text ? (
         <div
@@ -841,6 +943,23 @@ export default function StockPage() {
       />
 
 
+      <LotReportModal
+        open={lotReportOpen}
+        onClose={() => setLotReportOpen(false)}
+        stockRows={rows}
+        lotIndex={lotIndex}
+        onOpenProductLots={(id) => setLotsProductId(id)}
+      />
+
+      {lotsProduct ? (
+        <LotDistributionModal
+          product={lotsProduct}
+          lots={lotIndex.get(lotsProduct.ammo_type_id) ?? []}
+          onClose={() => setLotsProductId('')}
+          onChanged={loadStock}
+        />
+      ) : null}
+
       <StockMovementModal
         dialog={dialog}
         closeDialog={closeDialog}
@@ -866,6 +985,12 @@ export default function StockPage() {
         setSelectedAmmoId={setSelectedAmmoId}
         qtyInput={qtyInput}
         setQtyInput={setQtyInput}
+        lotInput={lotInput}
+        setLotInput={setLotInput}
+        entradaLotRequired={entradaLotRequired}
+        saidaLot={saidaLot}
+        setSaidaLot={setSaidaLot}
+        saidaLotOptions={saidaLotOptions}
         selectRef={selectRef}
         ammoOptions={ammoOptions}
         saidaStep={saidaStep}
@@ -924,6 +1049,14 @@ export default function StockPage() {
           disabled={loadingCalibers}
         >
           Relatórios
+        </button>
+        <button
+          type="button"
+          className="stock-page__action stock-page__action--report"
+          onClick={() => setLotReportOpen(true)}
+          disabled={loading && rows.length === 0}
+        >
+          Estoque por lote
         </button>
         <button
           type="button"
@@ -1087,13 +1220,14 @@ export default function StockPage() {
                               <tr>
                                 <th>Produto</th>
                                 <th>Quantidade em estoque</th>
+                                <th>Lotes</th>
                               </tr>
                             </thead>
                             <tbody>
                               {sectionRows.length === 0 ? (
                                 <tr>
                                   <td
-                                    colSpan={2}
+                                    colSpan={3}
                                     className="stock-per-caliber-table__empty"
                                   >
                                     Nenhum produto neste calibre.
@@ -1104,6 +1238,38 @@ export default function StockPage() {
                                   <tr key={row.ammo_type_id}>
                                     <td>{row.ammo_name}</td>
                                     <td>{row.stock}</td>
+                                    <td>
+                                      <div className="stock-page__lots-cell">
+                                        {(lotIndex.get(row.ammo_type_id) ?? [])
+                                          .filter((l) => l.stock !== 0)
+                                          .map((l) => (
+                                            <span
+                                              key={l.lot_number ?? NO_LOT}
+                                              className={
+                                                l.lot_number == null
+                                                  ? 'stock-page__lot-chip stock-page__lot-chip--pending'
+                                                  : 'stock-page__lot-chip'
+                                              }
+                                              title={
+                                                l.lot_number == null
+                                                  ? 'Saldo antigo ainda sem lote'
+                                                  : undefined
+                                              }
+                                            >
+                                              {lotDisplay(l.lot_number)}: {l.stock}
+                                            </span>
+                                          ))}
+                                        <button
+                                          type="button"
+                                          className="stock-page__lots-btn"
+                                          onClick={() =>
+                                            setLotsProductId(row.ammo_type_id)
+                                          }
+                                        >
+                                          Lotes
+                                        </button>
+                                      </div>
+                                    </td>
                                   </tr>
                                 ))
                               )}

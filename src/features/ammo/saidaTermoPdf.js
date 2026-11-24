@@ -30,7 +30,7 @@ export function filenameDateStamp(d) {
 }
 
 /**
- * @param {{ quantity: number, caliber: string, product: string }[]} lines
+ * @param {{ quantity: number, caliber: string, product: string, lot?: string }[]} lines
  * @param {{ atDate?: Date }} [options]
  * @returns {import('jspdf').jsPDF}
  */
@@ -74,17 +74,23 @@ export function buildSaidaTermoPdfDoc(lines, options) {
 
   y += 6
   ensureSpace(28)
+  const withLot = lines.some((l) => l.lot != null)
   const colQty = 28
   const colCal = 38
-  const colProd = textWidth - colQty - colCal
+  const colLot = withLot ? 32 : 0
+  const colProd = textWidth - colQty - colCal - colLot
   autoTable(doc, {
     startY: y,
-    head: [['Quantidade', 'Produto', 'Calibre']],
-    body: lines.map((l) => [
-      String(l.quantity),
-      l.product ?? '—',
-      l.caliber ?? '—',
-    ]),
+    head: [
+      withLot
+        ? ['Quantidade', 'Produto', 'Calibre', 'Lote']
+        : ['Quantidade', 'Produto', 'Calibre'],
+    ],
+    body: lines.map((l) => {
+      const row = [String(l.quantity), l.product ?? '—', l.caliber ?? '—']
+      if (withLot) row.push(l.lot ?? '—')
+      return row
+    }),
     styles: { fontSize: 9, cellPadding: 2, overflow: 'linebreak' },
     headStyles: {
       fillColor: [52, 73, 94],
@@ -95,12 +101,13 @@ export function buildSaidaTermoPdfDoc(lines, options) {
       0: { cellWidth: colQty, halign: 'center', valign: 'middle' },
       1: { cellWidth: colProd, halign: 'left', valign: 'middle' },
       2: { cellWidth: colCal, halign: 'left', valign: 'middle' },
+      ...(withLot ? { 3: { cellWidth: colLot, halign: 'left', valign: 'middle' } } : {}),
     },
     didParseCell(data) {
       if (data.section === 'head') {
         const i = data.column.index
         if (i === 0) data.cell.styles.halign = 'center'
-        if (i === 1 || i === 2) data.cell.styles.halign = 'left'
+        if (i >= 1) data.cell.styles.halign = 'left'
       }
     },
     margin: { left: MARGIN, right: MARGIN },
@@ -137,7 +144,7 @@ export function buildSaidaTermoPdfDoc(lines, options) {
 }
 
 /**
- * @param {{ quantity: number, caliber: string, product: string }[]} lines
+ * @param {{ quantity: number, caliber: string, product: string, lot?: string }[]} lines
  * @param {{ atDate?: Date }} [options]
  * @returns {{ blob: Blob, filename: string }}
  */
@@ -151,7 +158,7 @@ export function getSaidaTermoPdfBlob(lines, options) {
 }
 
 /**
- * @param {{ quantity: number, caliber: string, product: string }[]} lines
+ * @param {{ quantity: number, caliber: string, product: string, lot?: string }[]} lines
  * @param {{ atDate?: Date }} [options]
  */
 export function downloadSaidaTermoPdf(lines, options) {
